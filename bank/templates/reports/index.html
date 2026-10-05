@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs with context %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+{{ crumbs([('Reports', None)]) }}
+<div class="page-head"><div><h1>Reports</h1><p>{{ 'Export to Excel or PDF is enabled for your role.' if current_user.can('reports', 'export') else 'Your role can view reports but not export them.' }}</p></div></div>
+<div class="grid g-3">
+  {% for key, (title, desc, module, fn) in reports.items() %}
+  <a class="card report-card" href="{{ url_for('reports.view', key=key) }}">
+    <span class="kpi-icon">{{ icon('chart', 'sm') }}</span>
+    <span><strong>{{ title }}</strong><br><span class="small muted">{{ desc }}</span></span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

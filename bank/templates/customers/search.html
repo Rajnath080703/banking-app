@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Customer 360{% endblock %}
+{% block content %}
+{{ crumbs([('Customer 360', None)]) }}
+<div class="page-head">
+  <div><h1>Customer 360</h1><p>Find a customer by account number, customer ID, name, mobile number or PAN.</p></div>
+  {% if current_user.can('customer_profile', 'create') %}
+  <div class="actions"><a class="btn primary" href="{{ url_for('customers.new') }}">{{ icon('user-plus', 'sm') }} New customer</a></div>
+  {% endif %}
+</div>
+
+<div class="card mb"><div class="card-body">
+  <form method="get" class="filters">
+    <input type="search" name="q" value="{{ q }}" placeholder="Account no / CIF / name / mobile / PAN" autofocus aria-label="Search customers">
+    <button class="btn primary" type="submit">{{ icon('search', 'sm') }} Search</button>
+    {% if q %}<a class="btn ghost" href="{{ url_for('customers.search') }}">Clear</a>{% endif %}
+  </form>
+  <p class="small muted mt">Mobile and PAN match exactly (they are stored encrypted). Names match partially.</p>
+</div></div>
+
+<div class="card">
+  <div class="card-head"><h2>{{ 'Search results' if q else 'Recently onboarded' }} <span class="sub">· {{ results.total }} customer{{ 's' if results.total != 1 }}</span></h2></div>
+  <div class="card-body flush table-wrap">
+    {% if results.items %}
+    <table class="table">
+      <thead><tr><th>Customer</th><th>Customer ID</th><th>Mobile</th><th>PAN</th><th>Branch</th><th>KYC</th><th>Risk</th><th></th></tr></thead>
+      <tbody>
+      {% for c in results.items %}
+        <tr>
+          <td><div class="primary-cell">{{ c.name }}</div><div class="sub-cell">{{ c.occupation or '' }} · {{ c.city or '' }}</div></td>
+          <td class="mono">{{ c.customer_code }}</td>
+          <td class="mono">{{ c.mobile_masked }}</td>
+          <td class="mono">{{ c.pan_masked }}</td>
+          <td>{{ c.branch.name }}</td>
+          <td>{{ badge(c.kyc_status) }}</td>
+          <td>{{ badge(c.risk_category) }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('customers.profile', cid=c.id) }}">Open 360 {{ icon('chev-right', 'sm') }}</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}{{ empty('No customers match your search.', 'search') }}{% endif %}
+  </div>
+  {{ pager(results, 'customers.search') }}
+</div>
+{% endblock %}

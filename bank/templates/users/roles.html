@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, csrf with context %}
+{% block title %}Roles & permissions{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), ('Roles & permissions', None)]) }}
+<div class="page-head"><div><h1>Roles & Permissions</h1><p>Each role grants View / Create / Edit / Delete / Approve / Reject / Export rights per module.</p></div></div>
+<div class="grid g-21">
+  <div class="card"><div class="card-body flush table-wrap">
+    <table class="table">
+      <thead><tr><th>Role</th><th>Level</th><th>Employees</th><th>Modules with access</th><th></th></tr></thead>
+      <tbody>{% for r in roles %}
+        {% set granted = r.permissions|selectattr('can_view')|list %}
+        <tr><td><div class="primary-cell">{{ r.name }} {% if r.is_system %}{{ badge('System', 'neutral') }}{% endif %}</div><div class="sub-cell">{{ r.description or '' }}</div></td>
+          <td>{{ r.level }}</td><td>{{ counts.get(r.id, 0) }}</td>
+          <td>{{ 'All modules' if r.level >= 100 else granted|length ~ ' of ' ~ modules|length }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('users.role_edit', rid=r.id) }}">Permissions</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </div></div>
+  {% if current_user.can('user_management', 'create') %}
+  <div class="card"><div class="card-head"><h2>Create custom role</h2></div><div class="card-body">
+    <form method="post" action="{{ url_for('users.role_new') }}">
+      {{ csrf() }}
+      <div class="field"><label for="name">Role name</label><input id="name" name="name" required></div>
+      <div class="field"><label for="description">Description</label><input id="description" name="description"></div>
+      <div class="field"><label for="level">Seniority level (1–99)</label><input id="level" name="level" type="number" min="1" max="99" value="30">
+        <div class="hint">80+ can give final maker-checker approval. Must be below your own level.</div></div>
+      <button class="btn primary block">{{ icon('plus', 'sm') }} Create role</button>
+    </form>
+  </div></div>
+  {% endif %}
+</div>
+{% endblock %}

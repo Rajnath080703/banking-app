@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, page_title with context %}
+{% block title %}Gold Loan{% endblock %}
+{% block content %}
+{{ crumbs([('Loans', url_for('loans.index')), ('Gold Loan', None)]) }}
+<div class="page-head">
+  {{ page_title('Gold Loan Details', url_for('loans.index'), gold_count ~ ' active gold loans · ' ~ ('%.1f'|format(gold_weight)) ~ ' g of gold pledged') }}
+</div>
+
+{% set hide_type_tabs = True %}
+{% include "loans/_list.html" %}
+
+{% if found %}
+  <h2 class="mt mb">Search results · {{ found|length }} gold loan{{ 's' if found|length != 1 }} for “{{ term }}”</h2>
+  {% for l in found %}
+  <div class="card mb">
+    <div class="card-head"><h2>{{ icon('gold') }} {{ l.loan_number }} <span class="sub">· {{ l.customer.name }}</span></h2>
+      <div class="actions">{{ badge(l.status) }}<a class="btn sm" href="{{ url_for('loans.detail', lid=l.id) }}">Full details {{ icon('chev-right', 'sm') }}</a></div></div>
+    <div class="card-body grid g-4">
+      <dl class="kv"><dt>Customer</dt><dd>{{ l.customer.name }}</dd><dt>Customer ID</dt><dd class="mono">{{ l.customer.customer_code }}</dd>
+        <dt>Mobile</dt><dd class="mono">{{ l.customer.mobile_masked }}</dd><dt>KYC</dt><dd>{{ badge(l.customer.kyc_status) }}</dd></dl>
+      <dl class="kv"><dt>Account</dt><dd class="mono">{{ l.account.account_number if l.account else '—' }}</dd><dt>Branch</dt><dd>{{ l.branch.name }}</dd>
+        <dt>Disbursed</dt><dd>{{ l.disbursed_on|d }}</dd><dt>Tenure</dt><dd>{{ l.tenure_months }} months</dd></dl>
+      <dl class="kv"><dt>Gold weight</dt><dd><strong>{{ l.gold_weight_grams }} g</strong> · {{ l.gold_purity }}</dd><dt>Items</dt><dd>{{ l.gold_items or '—' }}</dd>
+        <dt>Valuation</dt><dd>{{ l.gold_valuation|inr }}</dd><dt>LTV</dt><dd>{{ '%.0f'|format(l.amount / l.gold_valuation * 100) if l.gold_valuation else '—' }}%</dd></dl>
+      <dl class="kv"><dt>Loan amount</dt><dd>{{ l.amount|inr }}</dd><dt>Outstanding</dt><dd><strong>{{ l.outstanding|inr }}</strong></dd>
+        <dt>Interest</dt><dd>{{ l.interest_rate }}% p.a.</dd><dt>EMI / Due</dt><dd>{{ l.emi|inr }} · {{ l.next_due_date|d }}{% if l.status == 'Overdue' %} <span class="neg">({{ l.overdue_days }}d overdue)</span>{% endif %}</dd></dl>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}
+{% endblock %}

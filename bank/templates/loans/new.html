@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}New loan{% endblock %}
+{% block content %}
+{{ crumbs([('Loans', url_for('loans.index')), ('New loan', None)]) }}
+<div class="page-head"><div><h1>Create a loan application</h1><p>The loan stays <strong>Pending Approval</strong> until a checker reviews and a manager sanctions it. Funds are disbursed on approval.</p></div></div>
+{% if not customer %}{% include "_customer_picker.html" %}{% else %}
+<div class="grid g-21">
+<div class="card"><div class="card-body">
+  {% if customer.kyc_status != 'Verified' %}<div class="notice warning mb">{{ icon('alert', 'sm') }} KYC for this customer is <strong>{{ customer.kyc_status }}</strong>. Loans can only be created for KYC-verified customers.</div>{% endif %}
+  <form method="post" class="form-grid" data-emi-form data-confirm="Submit this loan application for maker-checker approval?" data-confirm-ok="Submit">
+    {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
+    <div class="field"><label for="loan_type">Loan type</label><select id="loan_type" name="loan_type">
+      {% for key, label in LOAN_TYPES %}<option value="{{ key }}" {{ 'selected' if f.get('loan_type', request.args.get('type')) == key }}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="account_id">Disbursement account</label><select id="account_id" name="account_id">
+      <option value="">— None (cash / external) —</option>
+      {% for a in customer.accounts if a.status in ('Active', 'Inactive') %}<option value="{{ a.id }}">{{ a.account_number }} · {{ a.account_type }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="amount">Loan amount (₹)</label><input id="amount" name="amount" type="number" min="1000" step="1000" value="{{ f.get('amount', '') }}" required></div>
+    <div class="field"><label for="interest_rate">Interest rate (% p.a.)</label><input id="interest_rate" name="interest_rate" type="number" min="1" max="36" step="0.05" value="{{ f.get('interest_rate', '10.5') }}" required></div>
+    <div class="field"><label for="tenure_months">Tenure (months)</label><input id="tenure_months" name="tenure_months" type="number" min="1" max="360" value="{{ f.get('tenure_months', '12') }}" required></div>
+    <div class="field"><label>Estimated EMI</label><div class="kpi-value" id="emi-preview">—</div></div>
+    <div class="field full"><label for="purpose">Purpose</label><input id="purpose" name="purpose" value="{{ f.get('purpose', '') }}"></div>
+    <div class="field full"><label for="collateral">Collateral / security</label><input id="collateral" name="collateral" value="{{ f.get('collateral', '') }}"></div>
+    <div id="gold-fields" class="full form-grid">
+      <div class="field"><label for="gold_weight_grams">Gold weight (grams)</label><input id="gold_weight_grams" name="gold_weight_grams" type="number" step="0.1" min="0" value="{{ f.get('gold_weight_grams', '') }}"></div>
+      <div class="field"><label for="gold_purity">Purity</label><select id="gold_purity" name="gold_purity"><option>22K</option><option>24K</option><option>18K</option></select></div>
+      <div class="field"><label for="gold_items">Items pledged</label><input id="gold_items" name="gold_items" value="{{ f.get('gold_items', '') }}"></div>
+      <div class="field"><label for="gold_valuation">Valuation (₹)</label><input id="gold_valuation" name="gold_valuation" type="number" step="100" min="0" value="{{ f.get('gold_valuation', '') }}"></div>
+    </div>
+    <div class="full actions"><button class="btn primary" {{ 'disabled' if customer.kyc_status != 'Verified' }}>{{ icon('check', 'sm') }} Submit application</button>
+      <a class="btn ghost" href="{{ url_for('customers.profile', cid=customer.id) }}">Cancel</a></div>
+  </form>
+</div></div>
+<div class="card"><div class="card-head"><h2>Applicant</h2></div><div class="card-body">
+  <dl class="kv"><dt>Name</dt><dd>{{ customer.name }}</dd><dt>Customer ID</dt><dd class="mono">{{ customer.customer_code }}</dd>
+    <dt>KYC</dt><dd>{{ customer.kyc_status }}</dd><dt>Risk</dt><dd>{{ customer.risk_category }}</dd><dt>Branch</dt><dd>{{ customer.branch.name }}</dd></dl>
+</div></div>
+</div>
+{% endif %}
+{% endblock %}

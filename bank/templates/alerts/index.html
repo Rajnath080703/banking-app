@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf with context %}
+{% block title %}Alerts & Notifications{% endblock %}
+{% block content %}
+{{ crumbs([('Alerts & Notifications', None)]) }}
+<div class="page-head"><div><h1>Alerts & Notifications</h1><p>Alerts are routed to employees with access to the related module{% if not current_user.sees_all_branches %} in your branch{% endif %}.</p></div>
+  <div class="actions">
+    <form method="post" action="{{ url_for('alerts.mark_read') }}">{{ csrf() }}<button class="btn">{{ icon('check', 'sm') }} Mark all read</button></form>
+    {% if current_user.can('alerts', 'edit') %}<form method="post" action="{{ url_for('alerts.scan') }}">{{ csrf() }}<button class="btn">{{ icon('refresh', 'sm') }} Run scan</button></form>{% endif %}
+    <a class="btn" href="{{ url_for('alerts.rules') }}">{{ icon('settings', 'sm') }} Risk rules</a>
+  </div></div>
+
+<div class="kpis mb">
+  {% for k, label in types.items() %}
+  <a class="kpi" href="{{ url_for('alerts.index', type=k) }}"><span class="kpi-label">{{ label }}</span><span class="kpi-value">{{ counts.get(k, 0) }}</span></a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div class="seg">{% for key, label in [('open', 'Open'), ('resolved', 'Resolved'), ('all', 'All')] %}<a href="{{ url_for('alerts.index', show=key, type=atype) }}" class="{{ 'on' if show == key }}">{{ label }}</a>{% endfor %}</div>
+    <form method="get" class="filters"><input type="hidden" name="show" value="{{ show }}">
+      <select name="type" data-autosubmit><option value="">All alert types</option>{% for k, v in types.items() %}<option value="{{ k }}" {{ 'selected' if atype == k }}>{{ v }}</option>{% endfor %}</select></form>
+  </div>
+  <div class="card-body flush">
+    {% for a in alerts.items %}
+    <div class="alert-item {{ 'unread' if not a.is_read }}">
+      <span class="sev {{ a.severity }}">{{ icon('alert' if a.severity in ('High', 'Critical') else 'bell', 'sm') }}</span>
+      <div class="grow">
+        <a class="title" href="{{ url_for('alerts.open_alert', aid=a.id) }}">{{ a.title }}</a> {{ badge(a.severity) }} {{ badge(a.type_label, 'neutral') }}
+        <div class="msg">{{ a.message }}</div>
+        <div class="msg">{{ a.created_at|dt }}{% if a.reference %} · <span class="mono">{{ a.reference }}</span>{% endif %}{% if a.is_resolved %} · Resolved {{ a.resolved_at|dt }}{% endif %}</div>
+      </div>
+      {% if not a.is_resolved and current_user.can('alerts', 'edit') %}
+      <form method="post" action="{{ url_for('alerts.resolve', aid=a.id) }}" data-confirm="Mark this alert as resolved?" data-confirm-ok="Resolve">{{ csrf() }}<button class="btn sm">Resolve</button></form>
+      {% endif %}
+    </div>
+    {% else %}{{ empty('No alerts in this view.', 'bell') }}{% endfor %}
+  </div>
+  {{ pager(alerts, 'alerts.index') }}
+</div>
+{% endblock %}

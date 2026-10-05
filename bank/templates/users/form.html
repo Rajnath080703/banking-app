@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf, perm_grid with context %}
+{% block title %}{{ emp.name if emp else 'Add employee' }}{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), (emp.name if emp else 'Add employee', None)]) }}
+<div class="page-head"><div><h1>{{ 'Manage ' ~ emp.name if emp else 'Add employee' }}</h1>
+  <p>{{ emp.email ~ ' · ' ~ emp.employee_code if emp else 'The employee signs in with this email. They must change the temporary password on first sign-in.' }}</p></div></div>
+<div class="grid g-21">
+  <div class="card"><div class="card-body">
+    <form method="post" class="form-grid" {% if emp %}data-confirm="Save changes to {{ emp.name }}'s access?" data-confirm-ok="Save"{% endif %}>
+      {{ csrf() }}<input type="hidden" name="action" value="save">
+      <div class="field"><label for="name">Full name</label><input id="name" name="name" value="{{ emp.name if emp else f.get('name', '') }}" required></div>
+      <div class="field"><label for="email">Email address</label><input id="email" name="email" type="email" value="{{ emp.email if emp else f.get('email', '') }}" {{ 'disabled' if emp else 'required' }}></div>
+      <div class="field"><label for="role_id">Role</label><select id="role_id" name="role_id">
+        {% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if (emp and emp.role_id == r.id) or (f.get('role_id')|int == r.id) }}>{{ r.name }}</option>{% endfor %}</select>
+        <div class="hint">You can only assign roles below your own.</div></div>
+      <div class="field"><label for="branch_id">Branch</label><select id="branch_id" name="branch_id">
+        {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if (emp and emp.branch_id == b.id) or (not emp and b.id == current_user.branch_id) }}>{{ b.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="{{ emp.phone or '' if emp else f.get('phone', '') }}"></div>
+      {% if not emp %}
+      <div class="field"><label for="password">Initial password (optional)</label><input id="password" name="password" type="text" autocomplete="off"><div class="hint">Leave blank to generate a strong temporary password.</div></div>
+      {% else %}
+      <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="active" {{ 'checked' if emp.is_active_flag }}> Account active</label></div>
+      {% endif %}
+      <div class="full actions"><button class="btn primary">{{ icon('check', 'sm') }} {{ 'Save changes' if emp else 'Create employee' }}</button>
+        <a class="btn ghost" href="{{ url_for('users.index') }}">Cancel</a></div>
+    </form>
+  </div></div>
+
+  {% if emp %}
+  <div class="stack">
+    <div class="card"><div class="card-head"><h2>Security actions</h2></div><div class="card-body stack">
+      <dl class="kv"><dt>Status</dt><dd>{% if emp.locked_until and emp.locked_until > now.utcnow() %}{{ badge('Locked', 'danger') }}{% elif emp.is_active_flag %}{{ badge('Active') }}{% else %}{{ badge('Disabled', 'neutral') }}{% endif %}</dd>
+        <dt>Failed attempts</dt><dd>{{ emp.failed_attempts or 0 }}</dd><dt>MFA</dt><dd>{{ 'Enabled' if emp.mfa_enabled else 'Not enrolled' }}</dd>
+        <dt>Password changed</dt><dd>{{ emp.password_changed_at|dt }}</dd></dl>
+      {% for action, label, msg, tone in [('reset', 'Reset password', 'Generate a new temporary password and sign out all sessions?', 'danger'), ('unlock', 'Unlock account', 'Clear failed attempts and unlock this account?', 'primary'), ('revoke', 'Sign out all sessions', 'Force sign-out of every active session for this employee?', 'danger'), ('reset_mfa', 'Reset MFA', 'Remove this employee’s authenticator enrolment?', 'danger')] %}
+        <form method="post" data-confirm="{{ msg }}" data-confirm-tone="{{ tone }}" data-confirm-ok="{{ label }}">{{ csrf() }}<input type="hidden" name="action" value="{{ action }}"><button class="btn block">{{ label }}</button></form>
+      {% endfor %}
+    </div></div>
+    <div class="card"><div class="card-head"><h2>Recent logins</h2></div><div class="card-body flush table-wrap">
+      {% if history %}<table class="table"><tbody>{% for h in history %}<tr><td class="nowrap small">{{ h.timestamp|dt }}</td><td>{{ badge('Success' if h.success else 'Failed') }}</td><td class="small muted">{{ h.reason }} · {{ h.ip_address }}</td></tr>{% endfor %}</tbody></table>
+      {% else %}{{ empty('No logins yet.', 'clock') }}{% endif %}
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+{% if emp %}
+<div class="card mt"><div class="card-head"><h2>Permissions <span class="sub">· from role {{ emp.role.name }}</span></h2>
+  <a class="btn sm" href="{{ url_for('users.role_edit', rid=emp.role_id) }}">{{ icon('key', 'sm') }} Edit role permissions</a></div>
+  <div class="card-body">{{ perm_grid(modules, actions, grants, editable=False) }}</div></div>
+{% endif %}
+{% endblock %}

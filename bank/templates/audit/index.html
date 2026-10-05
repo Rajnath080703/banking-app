@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Audit Logs{% endblock %}
+{% block content %}
+{{ crumbs([('Audit Logs', None)]) }}
+<div class="page-head"><div><h1>Audit Logs</h1><p>Immutable trail of logins, profile access, changes, approvals, KYC, document access, permission changes and exports.</p></div>
+  {% if current_user.can('reports', 'export') and current_user.can('audit_logs', 'export') %}
+  <div class="actions"><a class="btn" href="{{ url_for('reports.view', key='audit-activity', range=rkey, start=start.isoformat(), end=end.isoformat(), export='xlsx') }}">{{ icon('download', 'sm') }} Export</a></div>{% endif %}
+</div>
+<div class="card">
+  <div class="card-head">
+    <form method="get" class="filters">
+      <select name="range" data-range-select>{% for k, label in [('today','Today'),('week','This Week'),('month','This Month'),('year','This Year'),('custom','Custom Range')] %}<option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ label }}</option>{% endfor %}</select>
+      <input type="date" name="start" value="{{ start.isoformat() }}" data-custom-range><input type="date" name="end" value="{{ end.isoformat() }}" data-custom-range>
+      <select name="cat" data-autosubmit><option value="">All events</option>
+        {% for k, label in [('auth', 'Login / Logout'), ('access', 'Profile & document access'), ('changes', 'Account & loan changes'), ('approvals', 'Approval actions'), ('kyc', 'KYC changes'), ('admin', 'Admin & permissions'), ('exports', 'Report exports')] %}
+        <option value="{{ k }}" {{ 'selected' if cat == k }}>{{ label }}</option>{% endfor %}</select>
+      <input type="search" name="user" value="{{ user }}" placeholder="User email">
+      <input type="search" name="ref" value="{{ ref }}" placeholder="Reference / action">
+      <button class="btn">{{ icon('filter', 'sm') }} Apply</button>
+    </form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if logs.items %}
+    <table class="table">
+      <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Module</th><th>Reference</th><th>Details</th><th>IP</th></tr></thead>
+      <tbody>{% for a in logs.items %}
+        <tr><td class="nowrap">{{ a.timestamp|dt('%d %b %Y, %H:%M:%S') }}</td><td>{{ a.email or 'anonymous' }}</td>
+          <td>{{ badge(a.action, 'danger' if 'denied' in a.action|lower or 'failed' in a.action|lower or 'locked' in a.action|lower else 'warning' if 'revealed' in a.action|lower or 'export' in a.action|lower or 'permission' in a.action|lower else 'neutral') }}</td>
+          <td>{{ MODULE_LABELS.get(a.module, a.module or '') }}</td><td class="mono">{{ a.reference or '' }}</td><td class="small">{{ a.details or '' }}</td><td class="mono small">{{ a.ip_address }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No audit events for these filters.', 'audit') }}{% endif %}
+  </div>
+  {{ pager(logs, 'audit.index') }}
+</div>
+{% endblock %}

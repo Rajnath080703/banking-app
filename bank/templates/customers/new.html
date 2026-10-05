@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}New customer{% endblock %}
+{% block content %}
+{{ crumbs([('Customer 360', url_for('customers.search')), ('New customer', None)]) }}
+<div class="page-head"><div><h1>Onboard a new customer</h1><p>PAN and mobile number are encrypted at rest. KYC documents can be uploaded after creation.</p></div></div>
+<div class="card"><div class="card-body">
+  <form method="post" class="form-grid">
+    {{ csrf() }}
+    <div class="field full"><label for="name">Full name *</label><input id="name" name="name" value="{{ f.get('name', '') }}" required></div>
+    <div class="field"><label for="pan">PAN *</label><input id="pan" name="pan" value="{{ f.get('pan', '') }}" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]" placeholder="ABCDE1234F" required></div>
+    <div class="field"><label for="mobile">Mobile *</label><input id="mobile" name="mobile" type="tel" value="{{ f.get('mobile', '') }}" pattern="[6-9][0-9]{9}" required></div>
+    <div class="field"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" value="{{ f.get('dob', '') }}"></div>
+    <div class="field"><label for="gender">Gender</label><select id="gender" name="gender"><option>Male</option><option>Female</option><option>Other</option></select></div>
+    <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ f.get('email', '') }}"></div>
+    <div class="field"><label for="occupation">Occupation</label><input id="occupation" name="occupation" value="{{ f.get('occupation', '') }}"></div>
+    <div class="field full"><label for="address">Address</label><input id="address" name="address" value="{{ f.get('address', '') }}"></div>
+    <div class="field"><label for="city">City</label><input id="city" name="city" value="{{ f.get('city', '') }}"></div>
+    <div class="field"><label for="branch_id">Home branch</label><select id="branch_id" name="branch_id">
+      {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if b.id == current_user.branch_id }}>{{ b.name }}</option>{% endfor %}</select></div>
+    <div class="full actions"><button class="btn primary" type="submit">{{ icon('check', 'sm') }} Create customer</button>
+      <a class="btn ghost" href="{{ url_for('customers.search') }}">Cancel</a></div>
+  </form>
+</div></div>
+{% endblock %}

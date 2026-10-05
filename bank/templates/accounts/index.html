@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+{{ crumbs([('Accounts', None)]) }}
+<div class="page-head"><div><h1>Savings & Current Accounts</h1><p>Active, inactive (6+ months idle), dormant (12+ months idle) and closed accounts.</p></div></div>
+<div class="card">
+  <div class="card-head">
+    <div class="seg">
+      {% for s in ['', 'Active', 'Inactive', 'Dormant', 'Pending', 'Closed'] %}
+        <a href="{{ url_for('accounts.index', status=s, type=acc_type, q=term) }}" class="{{ 'on' if status == s }}">{{ s or 'All' }}</a>{% endfor %}
+    </div>
+    <form method="get" class="filters">
+      <input type="hidden" name="status" value="{{ status }}">
+      <select name="type" data-autosubmit aria-label="Account type"><option value="">All types</option>
+        {% for t in ['Savings', 'Current'] %}<option {{ 'selected' if acc_type == t }}>{{ t }}</option>{% endfor %}</select>
+      <input type="search" name="q" value="{{ term }}" placeholder="Account no / customer / mobile / PAN">
+      <button class="btn">{{ icon('search', 'sm') }}</button>
+    </form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if accounts.items %}
+    <table class="table">
+      <thead><tr><th>Account No</th><th>Customer</th><th>Type</th><th>Branch</th><th>Opened</th><th>Last activity</th><th>Status</th><th class="num">Balance</th></tr></thead>
+      <tbody>{% for a in accounts.items %}
+        <tr><td class="mono primary-cell">{{ a.account_number }}</td>
+          <td>{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=a.customer_id, tab='accounts') }}">{{ a.customer.name }}</a>{% else %}{{ a.customer.name }}{% endif %}<div class="sub-cell mono">{{ a.customer.customer_code }}</div></td>
+          <td>{{ a.account_type }}</td><td>{{ a.branch.name }}</td><td>{{ a.opened_on|d }}</td><td>{{ a.last_txn_on|d }}</td>
+          <td>{{ badge(a.status) }}</td><td class="num"><strong>{{ a.balance|inr(2) }}</strong></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No accounts match the filters.', 'wallet') }}{% endif %}
+  </div>
+  {{ pager(accounts, 'accounts.index') }}
+</div>
+{% endblock %}

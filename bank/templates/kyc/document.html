@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% block title %}{{ doc.doc_type }}{% endblock %}
+{% block content %}
+{{ crumbs([('KYC & Documents', url_for('kyc.index')), (doc.customer.name, url_for('customers.profile', cid=doc.customer_id, tab='documents') if current_user.can('customer_profile') else None), (doc.doc_type, None)]) }}
+<div class="page-head"><div><h1>{{ doc.doc_type }} {{ badge(doc.status) }}</h1><p>{{ doc.customer.name }} · <span class="mono">{{ doc.customer.customer_code }}</span></p></div>
+  {% if doc.stored_name %}<div class="actions"><a class="btn" href="{{ url_for('kyc.download', did=doc.id) }}">{{ icon('download', 'sm') }} Download file</a></div>{% endif %}</div>
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>Document</h2></div><div class="card-body">
+    <dl class="kv">
+      <dt>Category</dt><dd>{{ doc.category }}{% if doc.loan %} · <a class="mono" href="{{ url_for('loans.detail', lid=doc.loan_id) }}">{{ doc.loan.loan_number }}</a>{% endif %}</dd>
+      <dt>Number</dt><dd class="mono">{{ doc.doc_number if current_user.can('kyc', 'approve') else doc.doc_number_masked }}</dd>
+      <dt>File</dt><dd>{{ doc.file_name or 'No file attached (physical copy on record)' }}</dd>
+      <dt>Issue date</dt><dd>{{ doc.issue_date|d }}</dd>
+      <dt>Expiry date</dt><dd>{{ doc.expiry_date|d }}{% if doc.days_to_expiry is not none %} <span class="small {{ 'neg' if doc.days_to_expiry < 30 else 'muted' }}">({{ doc.days_to_expiry }} days)</span>{% endif %}</dd>
+      <dt>Uploaded</dt><dd>{{ doc.uploaded_at|dt }} by {{ doc.uploader.name if doc.uploader else 'System' }}</dd>
+      <dt>Verified</dt><dd>{{ (doc.verified_at|dt ~ ' by ' ~ doc.verifier.name) if doc.verifier else '—' }}</dd>
+      <dt>Remarks</dt><dd>{{ doc.remarks or '—' }}</dd>
+    </dl>
+    {% if doc.status == 'Pending' and (current_user.can('kyc', 'approve') or current_user.can('kyc', 'reject')) %}
+    <hr class="divider">
+    {% if doc.uploaded_by == current_user.id %}
+      <div class="notice warning">{{ icon('lock', 'sm') }} You uploaded this document. A different employee must verify it.</div>
+    {% else %}
+    <form method="post" action="{{ url_for('kyc.verify', did=doc.id) }}" data-confirm="Record your verification decision for this document?" data-confirm-ok="Confirm">
+      {{ csrf() }}
+      <div class="field"><label for="remarks">Verification remarks</label><input id="remarks" name="remarks" maxlength="250"></div>
+      <div class="actions">
+        {% if current_user.can('kyc', 'approve') %}<button class="btn success" name="decision" value="approve">{{ icon('check', 'sm') }} Verify</button>{% endif %}
+        {% if current_user.can('kyc', 'reject') %}<button class="btn danger" name="decision" value="reject">{{ icon('x', 'sm') }} Reject</button>{% endif %}
+      </div>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div></div>
+  <div class="card"><div class="card-head"><h2>Verification history</h2></div><div class="card-body">
+    {% if history %}<ul class="timeline">{% for h in history %}
+      <li><span class="dot"></span><div class="t-title">{{ h.action }}</div><div class="t-meta">{{ h.employee.name if h.employee else 'System' }} · {{ h.timestamp|dt }}{% if h.remarks %} · “{{ h.remarks }}”{% endif %}</div></li>
+    {% endfor %}</ul>{% else %}{{ empty('No verification events recorded.', 'audit') }}{% endif %}
+  </div></div>
+</div>
+{% endblock %}

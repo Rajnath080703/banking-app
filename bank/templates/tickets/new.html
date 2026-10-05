@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}New ticket{% endblock %}
+{% block content %}
+{{ crumbs([('Tickets', url_for('tickets.index')), ('New ticket', None)]) }}
+<div class="page-head"><div><h1>Raise a ticket</h1></div></div>
+{% if not customer %}{% include "_customer_picker.html" %}{% else %}
+<div class="card"><div class="card-body">
+  <dl class="kv mb"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span></dd></dl>
+  <form method="post" class="form-grid">
+    {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
+    <div class="field full"><label for="subject">Subject</label><input id="subject" name="subject" required maxlength="200"></div>
+    <div class="field"><label for="category">Category</label><select id="category" name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="priority">Priority</label><select id="priority" name="priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+    <div class="field full"><label for="description">Description</label><textarea id="description" name="description"></textarea></div>
+    <div class="full actions"><button class="btn primary">{{ icon('check', 'sm') }} Create ticket</button></div>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}

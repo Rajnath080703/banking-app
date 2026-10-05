@@ -1,0 +1,43 @@
+{% from "macros.html" import icon, badge, empty, pager with context %}
+{% set ep = request.endpoint %}
+{% set va = request.view_args or {} %}
+{% set is_gold = loan_type == 'gold' %}
+<div class="card">
+  {% if not hide_type_tabs %}
+  <nav class="tabs in-card" aria-label="Loan categories">
+    <a href="{{ url_for('loans.index', status=status) }}" class="{{ 'on' if not loan_type }}">All Loans</a>
+    {% for key, label in LOAN_TYPES %}
+      <a href="{{ url_for('loans.gold') if key == 'gold' else url_for('loans.by_type', loan_type=key, status=status) }}" class="{{ 'on' if loan_type == key }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+  <form method="get" class="toolbar">
+    <div class="field"><label for="status">Status</label>
+      <select id="status" name="status" data-autosubmit>
+        {% for key, label in filters %}<option value="{{ key }}" {{ 'selected' if status == key }}>{{ label }} ({{ counts.get(key, 0) }})</option>{% endfor %}
+      </select></div>
+    <div class="grow-search">{{ icon('search', 'sm') }}<input type="search" name="q" value="{{ term }}" placeholder="Search by Account No. / Customer ID / Loan No." aria-label="Search loans"></div>
+    <button class="btn primary" type="submit">Search</button>
+    {% if term %}<a class="btn ghost" href="{{ url_for(ep, status=status, **va) }}">Clear</a>{% endif %}
+  </form>
+  <div class="card-body flush table-wrap">
+    {% if loans.items %}
+    <table class="table">
+      <thead><tr><th>Customer Name</th><th>Account No.</th>
+        {% if is_gold %}<th class="num">Gold Weight</th>{% else %}<th>Loan Type</th>{% endif %}
+        <th class="num">Loan Amount</th><th class="num">Outstanding</th>{% if not is_gold %}<th class="num">EMI</th>{% endif %}<th>Due Date</th><th>Status</th><th class="right">Actions</th></tr></thead>
+      <tbody>{% for l in loans.items %}
+        <tr><td><div class="primary-cell">{{ l.customer.name }}</div><div class="sub-cell mono">{{ l.loan_number }}</div></td>
+          <td class="mono">{{ l.account.account_number if l.account else '—' }}</td>
+          {% if is_gold %}<td class="num">{{ '%g'|format(l.gold_weight_grams or 0) }} g<div class="sub-cell">{{ l.gold_purity }}</div></td>{% else %}<td>{{ l.type_label }}</td>{% endif %}
+          <td class="num">{{ l.amount|inr }}</td><td class="num"><strong>{{ l.outstanding|inr }}</strong></td>
+          {% if not is_gold %}<td class="num">{{ l.emi|inr }}</td>{% endif %}
+          <td class="nowrap">{{ l.next_due_date|d }}{% if l.status == 'Overdue' %}<div class="sub-cell neg">{{ l.overdue_days }} days overdue</div>{% endif %}</td>
+          <td>{{ badge('Pending Approval' if l.status == 'Pending' else l.status, l.status|tone) }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('loans.detail', lid=l.id) }}">View</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No loans match the filters.', 'loan') }}{% endif %}
+  </div>
+  {{ pager(loans, ep) }}
+</div>

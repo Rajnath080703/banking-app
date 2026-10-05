@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf, page_title with context %}
+{% block title %}{{ c.name }} · Customer 360{% endblock %}
+
+{% macro accounts_table(accounts) %}
+  {% if accounts %}
+  <table class="table">
+    <thead><tr><th>Account No</th><th>Type</th><th>Opened</th><th>Last activity</th><th>Status</th><th class="num">Interest</th><th class="num">Balance</th><th></th></tr></thead>
+    <tbody>{% for a in accounts %}
+      <tr><td class="mono primary-cell">{{ a.account_number }}</td><td>{{ a.account_type }}</td><td>{{ a.opened_on|d }}</td>
+        <td>{{ a.last_txn_on|d }}</td><td>{{ badge(a.status) }}</td><td class="num">{{ a.interest_rate }}%</td>
+        <td class="num"><strong>{{ a.balance|inr(2) }}</strong></td>
+        <td class="right nowrap">
+          {% if current_user.can('transactions', 'create') and a.status not in ('Closed', 'Pending') %}<a class="btn sm" href="{{ url_for('transactions.new', account=a.account_number) }}">Post txn</a>{% endif %}
+          {% if current_user.can('customer_accounts', 'edit') and a.status not in ('Closed', 'Pending') %}
+          <form method="post" action="{{ url_for('accounts.close', aid=a.id) }}" class="reveal-form" data-confirm="Raise a closure request for account {{ a.account_number }}? It will go through maker-checker approval." data-confirm-title="Close account" data-confirm-tone="danger" data-confirm-ok="Request closure">
+            {{ csrf() }}<button class="btn sm ghost" type="submit">Close</button></form>{% endif %}
+        </td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty('No accounts.', 'wallet') }}{% endif %}
+{% endmacro %}
+
+{% macro loans_table(loans) %}
+  {% if loans %}
+  <table class="table">
+    <thead><tr><th>Loan No</th><th>Type</th><th class="num">Amount</th><th class="num">Outstanding</th><th class="num">Rate</th><th class="num">EMI</th><th>Next due</th><th>Status</th></tr></thead>
+    <tbody>{% for l in loans %}
+      <tr><td><a class="mono" href="{{ url_for('loans.detail', lid=l.id) }}">{{ l.loan_number }}</a></td><td>{{ l.type_label }}</td>
+        <td class="num">{{ l.amount|inr }}</td><td class="num"><strong>{{ l.outstanding|inr }}</strong></td><td class="num">{{ l.interest_rate }}%</td>
+        <td class="num">{{ l.emi|inr }}</td><td>{{ l.next_due_date|d }}{% if l.overdue_days %} <span class="small neg">({{ l.overdue_days }}d)</span>{% endif %}</td><td>{{ badge(l.status) }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty('No loans.', 'loan') }}{% endif %}
+{% endmacro %}
+
+{% macro timeline(items) %}
+  {% if items %}<ul class="timeline">{% for a in items %}
+    <li><span class="dot"></span><div class="t-title">{{ a.action }}{% if a.reference %} · <span class="mono">{{ a.reference }}</span>{% endif %}</div>
+      <div class="t-meta">{% if a.details %}{{ a.details }} · {% endif %}{{ a.employee.name if a.employee else 'System' }} · {{ a.timestamp|dt }}</div></li>
+  {% endfor %}</ul>{% else %}{{ empty('No activity recorded.', 'activity') }}{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  {{ page_title('Customer 360', url_for('customers.search')) }}
+  <div class="actions">
+    {% if can_sensitive and not revealed %}
+      <form method="post" action="{{ url_for('customers.reveal', cid=c.id) }}" class="reveal-form" data-confirm="Unmasking PAN and mobile number is recorded in the audit log. Continue?" data-confirm-title="Reveal sensitive data" data-confirm-ok="Reveal">
+        {{ csrf() }}<button class="btn sm" type="submit">{{ icon('eye', 'sm') }} Reveal PAN / mobile</button></form>
+    {% endif %}
+    {% if current_user.can('customer_profile', 'edit') %}<a class="btn sm" href="{{ url_for('customers.edit', cid=c.id) }}">{{ icon('edit', 'sm') }} Edit</a>{% endif %}
+  </div>
+</div>
+
+<div class="card mb"><div class="card-body">
+  <div class="c360-head">
+    <span class="photo">{{ icon('user-round') }}</span>
+    <div>
+      <h1>{{ c.name }} {{ badge(c.kyc_status ~ ' KYC', c.kyc_status|tone) }} {{ badge(c.risk_category ~ ' risk', c.risk_category|tone) }}</h1>
+      <div class="ids">Customer ID: <span class="mono">{{ c.customer_code }}</span> · {{ c.branch.name }}</div>
+      <div class="ids">Mobile: <span class="mono">{{ c.mobile if revealed else c.mobile_masked }}</span><span class="sep">|</span>Email: {{ c.email or '—' }}</div>
+    </div>
+    <div class="c360-stats">
+      <div><div class="label">Total Accounts</div><div class="value">{{ s.accounts }}</div></div>
+      <div><div class="label">Total Loans</div><div class="value">{{ s.loans }}</div></div>
+      <div><div class="label">Total Deposits</div><div class="value">{{ (s.casa + s.fd)|inr }}</div></div>
+    </div>
+  </div>
+</div></div>
+
+<nav class="tabs" aria-label="Customer sections">
+  {% for key, label in tabs %}<a href="{{ url_for('customers.profile', cid=c.id, tab=key) }}" class="{{ 'on' if tab == key }}">{{ label }}</a>{% endfor %}
+</nav>
+
+{% if tab == 'overview' %}
+<div class="grid g-3">
+  <div class="card"><div class="card-head"><h2>Customer Details</h2></div><div class="card-body">
+    <dl class="kv">
+      <dt>Name</dt><dd>{{ c.name }}</dd>
+      <dt>Date of Birth</dt><dd>{{ c.dob|d('%d-%m-%Y') }}</dd>
+      <dt>PAN</dt><dd class="mono">{{ c.pan if revealed else c.pan_masked }}</dd>
+      <dt>Address</dt><dd>{{ c.address or '—' }}{% if c.city %}, {{ c.city }}{% endif %}</dd>
+      <dt>Gender</dt><dd>{{ c.gender or '—' }}</dd>
+      <dt>Occupation</dt><dd>{{ c.occupation or '—' }}</dd>
+      <dt>Customer since</dt><dd>{{ c.created_at|d }}</dd>
+      <dt>KYC Status</dt><dd>{{ badge(c.kyc_status) }}</dd>
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-head"><h2>Account Summary</h2></div><div class="card-body">
+    {% for a in data.accounts if a.status != 'Closed' %}
+      <div class="acc-sum"><div><div class="name">{{ a.account_type }} Account</div><div class="no">{{ a.account_number }}</div></div>
+        <div class="amt">{{ a.balance|inr }}<span class="st {{ a.status|tone }}">({{ a.status }})</span></div></div>
+    {% endfor %}
+    {% for fd in data.fds %}
+      <div class="acc-sum"><div><div class="name">FD</div><div class="no">{{ fd.fd_number }}</div></div>
+        <div class="amt">{{ fd.principal|inr }}<span class="st {{ fd.status|tone }}">({{ fd.status }})</span></div></div>
+    {% endfor %}
+    {% if not data.accounts and not data.fds %}{{ empty('No accounts or deposits.', 'wallet') }}{% endif %}
+    <hr class="divider">
+    <dl class="kv">
+      <dt>Loan outstanding</dt><dd>{{ s.loan_outstanding|inr }}{% if s.overdue %} <span class="neg small">({{ s.overdue }} overdue)</span>{% endif %}</dd>
+      <dt>Monthly EMI</dt><dd>{{ s.emi_total|inr }}</dd>
+      <dt>Loan interest paid</dt><dd>{{ s.interest_paid|inr }}</dd>
+      <dt>FD interest at maturity</dt><dd>{{ s.fd_interest|inr }}</dd>
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-head"><h2>Needs Attention</h2>
+      {% if data.attention %}<span class="badge {{ 'danger' if data.attention|selectattr(0, 'equalto', 'danger')|list else 'warning' }}">{{ data.attention|length }}</span>{% endif %}</div>
+    <div class="card-body">
+      {% for tone, ic, text, link, label in data.attention %}
+        <div class="todo">
+          <span class="ic ring {{ tone if tone != 'info' else '' }}">{{ icon(ic, 'sm') }}</span>
+          <span class="txt">{{ text }}</span>
+          {% if link %}<a class="btn sm {{ 'primary' if label in ('Verify', 'Review', 'Collect EMI', 'Upload') else '' }}" href="{{ link }}">{{ label }}</a>{% endif %}
+        </div>
+      {% else %}
+        <div class="todo"><span class="ic ring success">{{ icon('check', 'sm') }}</span><span class="txt">Nothing pending for this customer. KYC, loans, approvals and tickets are all up to date.</span></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# Counter tasks an employee performs on the customer's behalf — every action is permission-checked and audit-logged. #}
+{% set pa = data.primary_account %}
+{% set actions = [
+    ('transactions', 'create', url_for('transactions.new', account=pa.account_number) if pa else None, 'swap', 'Post cash deposit / withdrawal', 'Primary a/c ' ~ pa.account_number if pa else 'No active account'),
+    ('transactions', 'view', url_for('customers.statement', cid=c.id), 'download', 'Print account statement', 'PDF, last 90 days — for the customer'),
+    ('loans', 'create', url_for('loans.new', customer=c.id), 'rupee', 'New loan application', 'Goes to checker & manager approval'),
+    ('deposits', 'create', url_for('deposits.new', customer=c.id), 'piggy', 'Book fixed deposit', 'Debits the funding account'),
+    ('customer_accounts', 'create', url_for('accounts.new', customer=c.id), 'wallet', 'Open new account', 'Savings / current, needs approval'),
+    ('kyc', 'create', url_for('kyc.upload', customer=c.id), 'upload', 'Collect KYC document', 'Upload scan for verification'),
+    ('customer_profile', 'edit', url_for('customers.edit', cid=c.id), 'edit', 'Update contact details', 'Mobile, email, address'),
+    ('tickets', 'create', url_for('tickets.new', customer=c.id), 'ticket', 'Log complaint / service request', s.open_tickets ~ ' open now' if s.open_tickets else 'Track to resolution'),
+] %}
+{% set allowed = actions|selectattr(2)|list %}
+<div class="card mt"><div class="card-head"><h2>Branch Actions <span class="sub">· tasks you perform for this customer at the counter</span></h2></div>
+  <div class="card-body">
+    <div class="branch-actions">
+      {% for mod, act, link, ic, label, hint in allowed if current_user.can(mod, act) %}
+        <a href="{{ link }}"><span class="qi">{{ icon(ic, 'sm') }}</span><span><strong>{{ label }}</strong><br><span class="hint">{{ hint }}</span></span></a>
+      {% else %}<p class="muted">Your role has view-only access to this customer.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grid g-21 mt">
+  {% if current_user.can('loans') %}
+  <div class="card"><div class="card-head"><h2>Loans</h2><a class="small" href="{{ url_for('customers.profile', cid=c.id, tab='loans') }}">All loans</a></div><div class="card-body flush table-wrap">{{ loans_table(data.loans) }}</div></div>
+  {% endif %}
+  <div class="card"><div class="card-head"><h2>Activity Timeline</h2><a class="small" href="{{ url_for('customers.profile', cid=c.id, tab='timeline') }}">View all</a></div><div class="card-body">{{ timeline(data.timeline) }}</div></div>
+</div>
+
+{% elif tab == 'accounts' %}
+<div class="card"><div class="card-body flush table-wrap">{{ accounts_table(data.accounts) }}</div></div>
+
+{% elif tab == 'deposits' %}
+<div class="card"><div class="card-body flush table-wrap">
+  {% if data.deposits %}
+  <table class="table">
+    <thead><tr><th>FD No</th><th class="num">Principal</th><th class="num">Rate</th><th>Tenure</th><th>Start</th><th>Maturity</th><th class="num">Maturity amount</th><th class="num">Interest</th><th>Status</th></tr></thead>
+    <tbody>{% for fd in data.deposits %}
+      <tr><td class="mono primary-cell">{{ fd.fd_number }}</td><td class="num">{{ fd.principal|inr }}</td><td class="num">{{ fd.interest_rate }}%</td><td>{{ fd.tenure_months }} months</td>
+        <td>{{ fd.start_date|d }}</td><td>{{ fd.maturity_date|d }}</td><td class="num">{{ fd.maturity_amount|inr }}</td><td class="num pos">{{ (fd.maturity_amount - fd.principal)|inr }}</td><td>{{ badge(fd.status) }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty('No fixed deposits.', 'piggy') }}{% endif %}
+</div></div>
+
+{% elif tab == 'transactions' %}
+<div class="card">
+  <div class="card-head"><h2>Transaction History</h2>
+    <form method="get" class="filters"><input type="hidden" name="tab" value="transactions">
+      <select name="account" data-autosubmit aria-label="Account"><option value="">All accounts</option>
+        {% for a in data.accounts %}<option value="{{ a.id }}" {{ 'selected' if request.args.get('account')|int == a.id }}>{{ a.account_number }} · {{ a.account_type }}</option>{% endfor %}</select></form></div>
+  <div class="card-body flush table-wrap">
+    {% if data.txns.items %}
+    <table class="table">
+      <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Description</th><th>Channel</th><th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead>
+      <tbody>{% for t in data.txns.items %}
+        <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
+          <td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
+          <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
+          <td>{% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No transactions.', 'swap') }}{% endif %}
+  </div>
+  {{ pager(data.txns, 'customers.profile') }}
+</div>
+
+{% elif tab == 'loans' %}
+<div class="card"><div class="card-body flush table-wrap">{{ loans_table(data.loans) }}</div></div>
+
+{% elif tab == 'repayments' %}
+<div class="card">
+  <div class="card-body flush table-wrap">
+    {% if data.repayments.items %}
+    <table class="table">
+      <thead><tr><th>Paid on</th><th>Loan</th><th>Due date</th><th class="num">Amount</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Penalty</th><th>Mode</th><th>Status</th></tr></thead>
+      <tbody>{% for r in data.repayments.items %}
+        <tr><td>{{ r.paid_on|d }}</td><td><a class="mono" href="{{ url_for('loans.detail', lid=r.loan_id) }}">{{ r.loan.loan_number }}</a></td><td>{{ r.due_date|d }}</td>
+          <td class="num"><strong>{{ r.amount|inr }}</strong></td><td class="num">{{ r.principal_component|inr }}</td><td class="num">{{ r.interest_component|inr }}</td>
+          <td class="num">{{ r.penalty|inr if r.penalty }}</td><td>{{ r.mode }}</td><td>{{ badge(r.status) }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No repayments yet.', 'rupee') }}{% endif %}
+  </div>
+  {{ pager(data.repayments, 'customers.profile') }}
+</div>
+
+{% elif tab == 'documents' %}
+<div class="card">
+  <div class="card-head"><h2>KYC & Documents</h2>{% if current_user.can('kyc', 'create') %}<a class="btn sm primary" href="{{ url_for('kyc.upload', customer=c.id) }}">{{ icon('upload', 'sm') }} Upload</a>{% endif %}</div>
+  <div class="card-body flush table-wrap">
+    {% if data.documents %}
+    <table class="table">
+      <thead><tr><th>Document</th><th>Category</th><th>Number</th><th>Uploaded</th><th>Expiry</th><th>Verified by</th><th>Status</th><th></th></tr></thead>
+      <tbody>{% for d in data.documents %}
+        <tr><td class="primary-cell">{{ d.doc_type }}</td><td>{{ d.category }}{% if d.loan %} · <span class="mono small">{{ d.loan.loan_number }}</span>{% endif %}</td>
+          <td class="mono">{{ d.doc_number_masked }}</td><td>{{ d.uploaded_at|d }}</td>
+          <td>{{ d.expiry_date|d }}{% if d.days_to_expiry is not none and d.days_to_expiry <= 30 %} <span class="small {{ 'neg' if d.days_to_expiry < 0 else 'muted' }}">({{ d.days_to_expiry }}d)</span>{% endif %}</td>
+          <td>{{ d.verifier.name if d.verifier else '—' }}</td><td>{{ badge(d.status) }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('kyc.document', did=d.id) }}">Open</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No documents uploaded.', 'file') }}{% endif %}
+  </div>
+</div>
+
+{% elif tab == 'timeline' %}
+<div class="card"><div class="card-body">{{ timeline(data.timeline.items) }}</div>{{ pager(data.timeline, 'customers.profile') }}</div>
+
+{% elif tab == 'approvals' %}
+<div class="card"><div class="card-body flush table-wrap">
+  {% if data.approvals %}
+  <table class="table">
+    <thead><tr><th>Request</th><th>Type</th><th>Summary</th><th>Maker</th><th>Checker</th><th>Approver</th><th>Created</th><th>Status</th></tr></thead>
+    <tbody>{% for r in data.approvals %}
+      <tr><td>{% if current_user.can(r.module) %}<a class="mono" href="{{ url_for('approvals.detail', rid=r.id) }}">{{ r.request_number }}</a>{% else %}<span class="mono">{{ r.request_number }}</span>{% endif %}</td>
+        <td>{{ r.type_label }}</td><td>{{ r.summary }}</td><td>{{ r.maker.name }}</td><td>{{ r.checker.name if r.checker else '—' }}</td>
+        <td>{{ r.approver.name if r.approver else '—' }}</td><td>{{ r.created_at|d }}</td><td>{{ badge(r.status) }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty('No approval requests.', 'approval') }}{% endif %}
+</div></div>
+
+{% elif tab == 'tickets' %}
+<div class="card">
+  <div class="card-head"><h2>Complaints & Tickets</h2>{% if current_user.can('tickets', 'create') %}<a class="btn sm primary" href="{{ url_for('tickets.new', customer=c.id) }}">{{ icon('plus', 'sm') }} New ticket</a>{% endif %}</div>
+  <div class="card-body flush table-wrap">
+    {% if data.tickets %}
+    <table class="table">
+      <thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Priority</th><th>Assigned</th><th>Created</th><th>Status</th></tr></thead>
+      <tbody>{% for t in data.tickets %}
+        <tr><td><a class="mono" href="{{ url_for('tickets.detail', tid=t.id) }}">{{ t.ticket_number }}</a></td><td>{{ t.subject }}</td><td>{{ t.category }}</td>
+          <td>{{ badge(t.priority) }}</td><td>{{ t.assignee.name if t.assignee else '—' }}</td><td>{{ t.created_at|d }}</td><td>{{ badge(t.status) }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No tickets.', 'ticket') }}{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

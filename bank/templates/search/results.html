@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs with context %}
+{% block title %}Search{% endblock %}
+{% block content %}
+{{ crumbs([('Search', None)]) }}
+<div class="page-head"><div><h1>Search results{% if q %} for “{{ q }}”{% endif %}</h1>
+  <p>Results only include records your role is allowed to see{% if not current_user.sees_all_branches %}, in your branch{% endif %}.</p></div></div>
+
+{% if current_user.can('customer_profile') %}
+<div class="card mb"><div class="card-head"><h2>Customers <span class="sub">· {{ results.customers|length }}</span></h2></div>
+  <div class="card-body flush table-wrap">
+  {% if results.customers %}<table class="table"><thead><tr><th>Name</th><th>Customer ID</th><th>Mobile</th><th>Branch</th><th>KYC</th><th></th></tr></thead><tbody>
+    {% for c in results.customers %}<tr><td class="primary-cell">{{ c.name }}</td><td class="mono">{{ c.customer_code }}</td><td class="mono">{{ c.mobile_masked }}</td>
+      <td>{{ c.branch.name }}</td><td>{{ badge(c.kyc_status) }}</td><td class="right"><a class="btn sm" href="{{ url_for('customers.profile', cid=c.id) }}">Open 360</a></td></tr>{% endfor %}
+  </tbody></table>{% else %}{{ empty('No matching customers.', 'customer') }}{% endif %}
+</div></div>
+{% endif %}
+
+{% if current_user.can('customer_accounts') %}
+<div class="card mb"><div class="card-head"><h2>Accounts <span class="sub">· {{ results.accounts|length }}</span></h2></div>
+  <div class="card-body flush table-wrap">
+  {% if results.accounts %}<table class="table"><thead><tr><th>Account No</th><th>Customer</th><th>Type</th><th>Status</th><th class="num">Balance</th></tr></thead><tbody>
+    {% for a in results.accounts %}<tr><td class="mono primary-cell">{{ a.account_number }}</td>
+      <td>{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=a.customer_id) }}">{{ a.customer.name }}</a>{% else %}{{ a.customer.name }}{% endif %}</td>
+      <td>{{ a.account_type }}</td><td>{{ badge(a.status) }}</td><td class="num">{{ a.balance|inr(2) }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}{{ empty('No matching accounts.', 'wallet') }}{% endif %}
+</div></div>
+{% endif %}
+
+{% if current_user.can('loans') %}
+<div class="card"><div class="card-head"><h2>Loans <span class="sub">· {{ results.loans|length }}</span></h2></div>
+  <div class="card-body flush table-wrap">
+  {% if results.loans %}<table class="table"><thead><tr><th>Loan No</th><th>Customer</th><th>Type</th><th class="num">Outstanding</th><th>Status</th></tr></thead><tbody>
+    {% for l in results.loans %}<tr><td><a class="mono" href="{{ url_for('loans.detail', lid=l.id) }}">{{ l.loan_number }}</a></td><td>{{ l.customer.name }}</td>
+      <td>{{ l.type_label }}</td><td class="num">{{ l.outstanding|inr }}</td><td>{{ badge(l.status) }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}{{ empty('No matching loans.', 'loan') }}{% endif %}
+</div></div>
+{% endif %}
+{% endblock %}

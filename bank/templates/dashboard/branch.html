@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, kpi, crumbs, range_filter with context %}
+{% block title %}Branch Dashboard{% endblock %}
+{% block content %}
+{{ crumbs([('Branch Dashboard', None)]) }}
+<div class="page-head">
+  <div><h1>{{ b.name }}</h1><p>{{ b.code }} · {{ b.city }} · {{ start|d }}{% if start != end %} – {{ end|d }}{% endif %}</p></div>
+  <form method="get" class="filters">
+    {% if branches %}
+    <select name="branch" data-autosubmit aria-label="Branch">
+      {% for x in branches %}<option value="{{ x.id }}" {{ 'selected' if x.id == b.id }}>{{ x.name }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <select name="range" data-range-select aria-label="Date range">
+      {% for k, label in [('today','Today'),('week','This Week'),('month','This Month'),('year','This Year'),('custom','Custom Range')] %}
+        <option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ label }}</option>{% endfor %}
+    </select>
+    <input type="date" name="start" value="{{ start.isoformat() }}" data-custom-range>
+    <input type="date" name="end" value="{{ end.isoformat() }}" data-custom-range>
+    <button class="btn" data-custom-range>Apply</button>
+  </form>
+</div>
+
+<div class="kpis">
+  {{ kpi('Customer Count', '{:,}'.format(k.total_customers), 'users') }}
+  {{ kpi('Deposit Value', k.total_deposits|inr_short, 'piggy', 'success') }}
+  {{ kpi('Loan Value', k.loan_outstanding|inr_short, 'loan', 'info', 'Outstanding') }}
+  {{ kpi('New Accounts', k.new_accounts, 'wallet', 'success') }}
+  {{ kpi('Closed Accounts', k.closed_accounts, 'x', 'danger') }}
+  {{ kpi('Loan Disbursement', k.loan_disbursement|inr_short, 'rupee', 'info') }}
+  {{ kpi('Loan Collection', k.loan_collection|inr_short, 'trend-up', 'success') }}
+  {{ kpi('Pending Approvals', k.pending_approvals, 'approval', 'warning') }}
+  {{ kpi('KYC Pending', k.kyc_pending, 'shield', 'warning') }}
+  {{ kpi('Customer Tickets', k.tickets_open, 'ticket', 'info', k.tickets_raised ~ ' raised in period') }}
+</div>
+
+{% if t %}
+<div class="grid g-3 mt">
+  {% for label, actual, target, tone in [('Deposits', t.deposit_actual, t.deposit_target, 'success'), ('Loans', t.loan_actual, t.loan_target, 'warning'), ('New accounts (month)', t.acc_actual, t.acc_target, '')] %}
+  {% set pct = (actual / target * 100) if target else 0 %}
+  <div class="card"><div class="card-body">
+    <div class="kpi-top"><span class="kpi-label">Branch Target · {{ label }}</span><strong>{{ '%.0f'|format(pct) }}%</strong></div>
+    <div class="stat-row mt">
+      <div class="stat"><div class="label">Achievement</div><div class="value">{{ actual|inr_short if label != 'New accounts (month)' else actual }}</div></div>
+      <div class="stat"><div class="label">Target</div><div class="value">{{ target|inr_short if label != 'New accounts (month)' else target }}</div></div>
+    </div>
+    <div class="progress {{ tone }} mt"><span data-width="{{ pct }}"></span></div>
+  </div></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="grid g-2 mt">
+  <div class="card"><div class="card-head"><h2>Income vs Outgoing</h2></div>
+    <div class="card-body"><div class="chart-box"><canvas data-chart="flow" data-source="d-flow"></canvas></div></div></div>
+  <div class="card"><div class="card-head"><h2>Deposit & Loan Trends</h2></div>
+    <div class="card-body"><div class="chart-box"><canvas data-chart="trends" data-source="d-trends"></canvas></div></div></div>
+  <div class="card"><div class="card-head"><h2>Account Status</h2></div>
+    <div class="card-body"><div class="chart-box sm"><canvas data-chart="doughnut" data-colors="c2,c3,c6" data-source="d-accounts"></canvas></div></div></div>
+  <div class="card"><div class="card-head"><h2>Loan Status</h2></div>
+    <div class="card-body"><div class="chart-box sm"><canvas data-chart="doughnut" data-colors="c1,c6,c4,c3" data-source="d-loans"></canvas></div></div></div>
+</div>
+<script type="application/json" id="d-flow">{{ charts.flow|tojson }}</script>
+<script type="application/json" id="d-accounts">{{ charts.accounts|tojson }}</script>
+<script type="application/json" id="d-loans">{{ charts.loans|tojson }}</script>
+<script type="application/json" id="d-trends">{{ charts.trends|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}

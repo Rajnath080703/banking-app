@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', None)]) }}
+<div class="page-head">
+  <div><h1>Transactions</h1><p>{{ start|d }}{% if start != end %} – {{ end|d }}{% endif %}</p></div>
+  {% if current_user.can('transactions', 'create') %}<div class="actions"><a class="btn primary" href="{{ url_for('transactions.new') }}">{{ icon('plus', 'sm') }} Post transaction</a></div>{% endif %}
+</div>
+<div class="kpis mb">
+  {% set cr = totals.get('Credit', (0, 0)) %}{% set dr = totals.get('Debit', (0, 0)) %}
+  <div class="kpi"><span class="kpi-label">Credits</span><span class="kpi-value pos">{{ (cr[0] or 0)|inr_short }}</span><span class="kpi-foot">{{ cr[1] }} transactions</span></div>
+  <div class="kpi"><span class="kpi-label">Debits</span><span class="kpi-value neg">{{ (dr[0] or 0)|inr_short }}</span><span class="kpi-foot">{{ dr[1] }} transactions</span></div>
+  <div class="kpi"><span class="kpi-label">Net flow</span><span class="kpi-value">{{ ((cr[0] or 0) - (dr[0] or 0))|inr_short }}</span></div>
+</div>
+<div class="card">
+  <div class="card-head">
+    <form method="get" class="filters">
+      <select name="range" data-range-select>{% for k, label in [('today','Today'),('week','This Week'),('month','This Month'),('year','This Year'),('custom','Custom Range')] %}<option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ label }}</option>{% endfor %}</select>
+      <input type="date" name="start" value="{{ start.isoformat() }}" data-custom-range><input type="date" name="end" value="{{ end.isoformat() }}" data-custom-range>
+      <select name="type" data-autosubmit><option value="">Credit & debit</option>{% for t in ['Credit', 'Debit'] %}<option {{ 'selected' if ttype == t }}>{{ t }}</option>{% endfor %}</select>
+      <select name="channel" data-autosubmit><option value="">All channels</option>{% for c in ['Cash', 'NEFT', 'IMPS', 'UPI', 'Cheque', 'Transfer'] %}<option {{ 'selected' if channel == c }}>{{ c }}</option>{% endfor %}</select>
+      <label class="check"><input type="checkbox" name="flagged" value="1" {{ 'checked' if request.args.get('flagged') }}> Flagged only</label>
+      <input type="search" name="q" value="{{ term }}" placeholder="Txn ref / account / customer">
+      <button class="btn">{{ icon('filter', 'sm') }} Apply</button>
+    </form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if txns.items %}
+    <table class="table">
+      <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Customer</th><th>Description</th><th>Channel</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th><th></th></tr></thead>
+      <tbody>{% for t in txns.items %}
+        <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
+          <td>{{ t.customer.name }}</td><td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
+          <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
+          <td class="num muted">{{ t.balance_after|inr(2) }}</td><td>{% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No transactions in this period.', 'swap') }}{% endif %}
+  </div>
+  {{ pager(txns, 'transactions.index') }}
+</div>
+{% endblock %}

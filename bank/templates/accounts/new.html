@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Open account{% endblock %}
+{% block content %}
+{{ crumbs([('Accounts', url_for('accounts.index')), ('Open account', None)]) }}
+<div class="page-head"><div><h1>Open a new account</h1><p>New accounts stay <strong>Pending</strong> until a checker reviews and a manager approves.</p></div></div>
+{% if not customer %}{% include "_customer_picker.html" %}{% else %}
+<div class="card"><div class="card-body">
+  <dl class="kv mb"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span></dd>
+    <dt>KYC</dt><dd>{{ customer.kyc_status }}</dd><dt>Branch</dt><dd>{{ customer.branch.name }}</dd></dl>
+  <form method="post" data-confirm="Submit a new account request for {{ customer.name }}?" data-confirm-ok="Submit">
+    {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
+    <div class="field"><label for="account_type">Account type</label>
+      <select id="account_type" name="account_type"><option>Savings</option><option>Current</option></select></div>
+    <div class="actions"><button class="btn primary">{{ icon('check', 'sm') }} Submit for approval</button>
+      <a class="btn ghost" href="{{ url_for('customers.profile', cid=customer.id) }}">Cancel</a></div>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}

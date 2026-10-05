@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Approvals{% endblock %}
+{% block content %}
+{{ crumbs([('Approvals', None)]) }}
+<div class="page-head"><div><h1>Approvals</h1>
+  <p>Maker-checker workflow: Employee creates request → Checker reviews → Manager approves / rejects → Audit log updated.</p></div></div>
+<div class="card">
+  <div class="card-head">
+    <div class="seg">
+      {% for key, label in [('open', 'Open'), ('mine', 'Raised by me'), ('Approved', 'Approved'), ('Rejected', 'Rejected'), ('all', 'All')] %}
+        <a href="{{ url_for('approvals.index', status=key, type=rtype) }}" class="{{ 'on' if status == key }}">{{ label }}</a>{% endfor %}
+    </div>
+    <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
+      <select name="type" data-autosubmit><option value="">All request types</option>
+        {% for k, v in types.items() %}<option value="{{ k }}" {{ 'selected' if rtype == k }}>{{ v }}</option>{% endfor %}</select></form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if reqs.items %}
+    <table class="table">
+      <thead><tr><th>Request</th><th>Type</th><th>Summary</th><th class="num">Amount</th><th>Maker</th><th>Checker</th><th>Created</th><th>Status</th><th></th></tr></thead>
+      <tbody>{% for r in reqs.items %}
+        <tr><td class="mono primary-cell">{{ r.request_number }}</td><td>{{ r.type_label }}</td><td>{{ r.summary }}</td>
+          <td class="num">{{ r.amount|inr if r.amount }}</td><td>{{ r.maker.name }}</td><td>{{ r.checker.name if r.checker else '—' }}</td>
+          <td class="nowrap">{{ r.created_at|d }}</td><td>{{ badge(r.status) }}</td>
+          <td class="right"><a class="btn sm {{ 'primary' if actionable[r.id] }}" href="{{ url_for('approvals.detail', rid=r.id) }}">{{ 'Action' if actionable[r.id] else 'View' }}</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No approval requests here.', 'approval') }}{% endif %}
+  </div>
+  {{ pager(reqs, 'approvals.index') }}
+</div>
+{% endblock %}

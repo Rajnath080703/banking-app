@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, page_title with context %}
+{% block title %}KYC & Documents{% endblock %}
+{% block content %}
+{{ crumbs([('KYC & Documents', None)]) }}
+<div class="page-head">
+  {{ page_title('KYC Management', url_for('dashboard.index'),
+                counts.customers_pending ~ ' customers awaiting KYC · ' ~ counts.verified_month ~ ' documents verified this month') }}
+  {% if current_user.can('kyc', 'create') %}<div class="actions"><a class="btn primary" href="{{ url_for('kyc.upload') }}">{{ icon('upload', 'sm') }} Upload Document</a></div>{% endif %}
+</div>
+<div class="card">
+  <nav class="tabs in-card" aria-label="KYC views">
+    {% for key, label, n in [('pending', 'Pending', counts.pending), ('expiring', 'Expiring', counts.expiring), ('verified', 'Verified', None), ('expired', 'Expired', counts.expired), ('all', 'All', None)] %}
+      <a href="{{ url_for('kyc.index', view=key, q=term) }}" class="{{ 'on' if view == key }}">{{ label }}{% if n is not none %} <span class="n">({{ n }})</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  <form method="get" class="toolbar"><input type="hidden" name="view" value="{{ view }}">
+    <div class="grow-search">{{ icon('search', 'sm') }}<input type="search" name="q" value="{{ term }}" placeholder="Search by Account No. / Customer ID / Name / PAN" aria-label="Search KYC"></div>
+    <button class="btn primary">Search</button>
+    {% if term %}<a class="btn ghost" href="{{ url_for('kyc.index', view=view) }}">Clear</a>{% endif %}
+  </form>
+  <div class="card-body flush table-wrap">
+    {% if docs.items %}
+    <table class="table">
+      <thead><tr><th>Customer Name</th><th>Account No.</th><th>Document</th><th>Expiry Date</th><th>Uploaded</th><th>Status</th><th class="right">Actions</th></tr></thead>
+      <tbody>{% for d in docs.items %}
+        {% set expiring = d.days_to_expiry is not none and 0 <= d.days_to_expiry <= 30 and d.status != 'Expired' %}
+        <tr><td><div class="primary-cell">{{ d.customer.name }}</div><div class="sub-cell mono">{{ d.customer.customer_code }}</div></td>
+          <td class="mono">{{ d.customer.primary_account_number or '—' }}</td>
+          <td>{{ d.doc_type }}<div class="sub-cell mono">{{ d.doc_number_masked }}</div></td>
+          <td class="nowrap">{{ d.expiry_date|d('%d-%m-%Y') }}{% if d.days_to_expiry is not none %}<div class="sub-cell {{ 'neg' if d.days_to_expiry < 0 else '' }}">{{ d.days_to_expiry|abs }} days {{ 'ago' if d.days_to_expiry < 0 else 'left' }}</div>{% endif %}</td>
+          <td class="nowrap">{{ d.uploaded_at|d }}<div class="sub-cell">{{ d.uploader.name if d.uploader else '' }}</div></td>
+          <td>{{ badge('Expiring', 'warning') if expiring and d.status == 'Verified' else badge(d.status) }}</td>
+          <td class="right"><a class="btn sm {{ 'primary' if d.status == 'Pending' and current_user.can('kyc', 'approve') }}" href="{{ url_for('kyc.document', did=d.id) }}">{{ 'Verify' if d.status == 'Pending' and current_user.can('kyc', 'approve') else 'View' }}</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No documents in this view.', 'shield') }}{% endif %}
+  </div>
+  {{ pager(docs, 'kyc.index') }}
+</div>
+{% endblock %}

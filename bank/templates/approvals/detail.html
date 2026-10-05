@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, csrf with context %}
+{% block title %}{{ r.request_number }}{% endblock %}
+{% block content %}
+{{ crumbs([('Approvals', url_for('approvals.index')), (r.request_number, None)]) }}
+<div class="page-head"><div><h1>{{ r.type_label }} · <span class="mono">{{ r.request_number }}</span> {{ badge(r.status) }}</h1><p>{{ r.summary }}</p></div></div>
+
+<div class="card mb"><div class="card-body">{% include "approvals/_steps.html" %}</div></div>
+
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>Request details</h2></div><div class="card-body">
+    <dl class="kv">
+      <dt>Customer</dt><dd>{% if r.customer %}{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=r.customer_id) }}">{{ r.customer.name }}</a>{% else %}{{ r.customer.name }}{% endif %} · <span class="mono">{{ r.customer.customer_code }}</span>{% endif %}</dd>
+      <dt>Branch</dt><dd>{{ r.branch.name if r.branch else '—' }}</dd>
+      {% if r.amount %}<dt>Amount</dt><dd><strong>{{ r.amount|inr }}</strong></dd>{% endif %}
+      <dt>Reference</dt><dd>{% if r.ref_type == 'loan' %}<a href="{{ url_for('loans.detail', lid=r.ref_id) }}">View loan</a>{% else %}{{ r.ref_type }} #{{ r.ref_id }}{% endif %}</dd>
+      <dt>Maker</dt><dd>{{ r.maker.name }} ({{ r.maker.role.name }})</dd>
+      <dt>Checker</dt><dd>{{ r.checker.name if r.checker else '—' }}{% if r.checker_remarks %}<div class="small muted">“{{ r.checker_remarks }}”</div>{% endif %}</dd>
+      <dt>Decision</dt><dd>{{ r.approver.name if r.approver and r.status in ('Approved', 'Rejected') else '—' }}{% if r.approver_remarks %}<div class="small muted">“{{ r.approver_remarks }}”</div>{% endif %}</dd>
+      {% for k, v in r.payload.items() if k != 'funding_account_id' %}<dt>{{ k|replace('_', ' ')|capitalize }}</dt><dd>{{ v }}</dd>{% endfor %}
+    </dl>
+  </div></div>
+
+  <div class="card"><div class="card-head"><h2>Action</h2></div><div class="card-body">
+    {% if can_review or can_decide or can_reject %}
+      <form method="post" id="approval-form">
+        {{ csrf() }}
+        <div class="field"><label for="remarks">Remarks {{ '(required to reject)' if can_reject }}</label><textarea id="remarks" name="remarks" maxlength="250"></textarea></div>
+      </form>
+      <div class="actions">
+        {% if can_review %}
+          <form method="post" data-confirm="Mark this request as reviewed and forward it to the branch manager?" data-confirm-title="Checker review" data-confirm-ok="Forward">
+            {{ csrf() }}<input type="hidden" name="action" value="review"><input type="hidden" name="remarks" data-copy-remarks>
+            <button class="btn primary">{{ icon('eye', 'sm') }} Review & forward</button></form>
+        {% endif %}
+        {% if can_decide %}
+          <form method="post" data-confirm="Approve and execute this request? This action will be audit-logged." data-confirm-title="Final approval" data-confirm-tone="success" data-confirm-ok="Approve">
+            {{ csrf() }}<input type="hidden" name="action" value="approve"><input type="hidden" name="remarks" data-copy-remarks>
+            <button class="btn success">{{ icon('check', 'sm') }} Approve</button></form>
+        {% endif %}
+        {% if can_reject %}
+          <form method="post" data-confirm="Reject this request?" data-confirm-title="Reject request" data-confirm-tone="danger" data-confirm-ok="Reject">
+            {{ csrf() }}<input type="hidden" name="action" value="reject"><input type="hidden" name="remarks" data-copy-remarks>
+            <button class="btn danger">{{ icon('x', 'sm') }} Reject</button></form>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="notice">{{ icon('lock', 'sm') }}
+        <span>{% if r.status in ('Approved', 'Rejected') %}This request is complete.
+        {% elif r.maker_id == current_user.id %}You raised this request, so you cannot review or approve it (maker-checker).
+        {% elif r.checker_id == current_user.id %}You reviewed this request; a different manager must make the final decision.
+        {% elif r.status == 'Reviewed' %}Awaiting final approval by a Branch Manager or above.
+        {% else %}You do not have approval rights for this request type.{% endif %}</span></div>
+    {% endif %}
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/approvals.js') }}"></script>
+{% endblock %}

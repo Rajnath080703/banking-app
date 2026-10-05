@@ -1,0 +1,9 @@
+{# Shown when a create form is opened without a customer selected. #}
+{% from "macros.html" import icon %}
+<div class="card"><div class="card-body">
+  <form method="get" class="filters">
+    <input type="search" name="ref" placeholder="Customer ID (CIF…) or account number" required autofocus aria-label="Customer reference">
+    <button class="btn primary">{{ icon('search', 'sm') }} Select customer</button>
+  </form>
+  <p class="small muted mt">Enter the exact customer ID or account number.{% if current_user.can('customer_profile') %} Or <a href="{{ url_for('customers.search') }}">search Customer 360</a> and use the action buttons there.{% endif %}</p>
+</div></div>

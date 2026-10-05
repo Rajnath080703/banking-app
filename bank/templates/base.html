@@ -1,0 +1,127 @@
+{% from "macros.html" import icon, csrf with context %}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · {{ bank_name }} Ops</title>
+  <script src="{{ url_for('static', filename='js/theme-init.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/design.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%231f4fd8'/%3E%3Cpath d='M5 10 12 6l7 4M7 10v6M12 10v6M17 10v6M5 18h14' stroke='%23e0b04a' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+{% set ep = request.endpoint or '' %}
+{% macro nav_link(endpoint, label, icon_name, active=None, count=None, args={}) -%}
+  <a href="{{ url_for(endpoint, **args) }}" class="{{ 'active' if (active if active is not none else ep == endpoint) }}">
+    {{ icon(icon_name) }}<span>{{ label }}</span>{% if count %}<span class="count">{{ count }}</span>{% endif %}
+  </a>
+{%- endmacro %}
+<body data-session-timeout="{{ session_timeout or 0 }}">
+<div class="app">
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="brand">
+      <div class="brand-mark">{{ icon('loan') }}</div>
+      <div><div class="brand-name">{{ bank_name }}</div><div class="brand-tag">Secure • Simple • Together</div></div>
+    </div>
+    <nav class="nav">
+      {{ nav_link('dashboard.index', 'Dashboard', 'dashboard') }}
+      {% if current_user.can('customer_profile') %}{{ nav_link('customers.search', 'Customer 360', 'customer', ep.startswith('customers.')) }}{% endif %}
+      {% if current_user.can('customer_accounts') %}{{ nav_link('accounts.index', 'Accounts', 'wallet', ep.startswith('accounts.')) }}{% endif %}
+      {% if current_user.can('loans') %}
+      <details {{ 'open' if ep.startswith('loans.') }}>
+        <summary class="{{ 'active' if ep.startswith('loans.') }}">{{ icon('rupee') }}<span>Loans</span>{{ icon('chev-right', 'sm chev') }}</summary>
+        <div class="sub">
+          <a href="{{ url_for('loans.index') }}" class="{{ 'active' if ep in ('loans.index',) }}">All Loans</a>
+          <a href="{{ url_for('loans.gold') }}" class="{{ 'active' if ep == 'loans.gold' }}">Gold Loan</a>
+          {% for key, label in LOAN_TYPES if key != 'gold' %}
+            <a href="{{ url_for('loans.by_type', loan_type=key) }}" class="{{ 'active' if request.view_args and request.view_args.get('loan_type') == key }}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      {% if current_user.can('deposits') %}
+      <details {{ 'open' if ep.startswith('deposits.') }}>
+        <summary class="{{ 'active' if ep.startswith('deposits.') }}">{{ icon('piggy') }}<span>Deposits & FD</span>{{ icon('chev-right', 'sm chev') }}</summary>
+        <div class="sub">
+          <a href="{{ url_for('deposits.index') }}" class="{{ 'active' if ep == 'deposits.index' and not request.args.get('maturing') }}">Fixed Deposits</a>
+          <a href="{{ url_for('deposits.index', maturing=1) }}" class="{{ 'active' if request.args.get('maturing') }}">Maturing Soon</a>
+          {% if current_user.can('deposits', 'create') %}<a href="{{ url_for('deposits.new') }}" class="{{ 'active' if ep == 'deposits.new' }}">Book FD</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if current_user.can('transactions') %}{{ nav_link('transactions.index', 'Transactions', 'swap', ep.startswith('transactions.')) }}{% endif %}
+      {% if current_user.can('kyc') %}{{ nav_link('kyc.index', 'KYC & Documents', 'file', ep.startswith('kyc.')) }}{% endif %}
+      {% if current_user.can('loan_approval') or current_user.can('customer_accounts', 'approve') or current_user.can('deposits', 'approve') %}
+        {{ nav_link('approvals.index', 'Approvals', 'approval', ep.startswith('approvals.')) }}
+      {% endif %}
+      {% if current_user.can('tickets') %}{{ nav_link('tickets.index', 'Tickets', 'ticket', ep.startswith('tickets.')) }}{% endif %}
+      {% if current_user.can('branch_management') %}{{ nav_link('dashboard.branch', 'Branch Dashboard', 'branch') }}{% endif %}
+      {% if current_user.can('reports') %}{{ nav_link('reports.index', 'Reports', 'chart', ep.startswith('reports.')) }}{% endif %}
+      {% if current_user.can('alerts') %}{{ nav_link('alerts.index', 'Alerts & Notifications', 'bell', ep.startswith('alerts.'), unread_alerts) }}{% endif %}
+      {% if current_user.can('audit_logs') %}{{ nav_link('audit.index', 'Audit Logs', 'audit', ep.startswith('audit.')) }}{% endif %}
+      {% if current_user.can('user_management') %}{{ nav_link('users.index', 'User Management', 'users', ep.startswith('users.')) }}{% endif %}
+      {% if current_user.can('settings') %}{{ nav_link('settings.index', 'Settings', 'settings', ep == 'settings.index') }}{% endif %}
+    </nav>
+    <div class="sidebar-foot">{{ icon('lock', 'sm') }} Secure session · {{ current_user.branch.name if current_user.branch else 'All branches' }}</div>
+  </aside>
+  <div class="overlay"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" data-toggle-nav aria-label="Open menu">{{ icon('menu') }}</button>
+      <form class="search-global" action="{{ url_for('customers.global_search') }}" method="get" role="search">
+        {{ icon('search') }}
+        <input type="search" name="q" placeholder="Search account no, customer ID, name, mobile, PAN, loan no…" value="{{ request.args.get('q', '') if ep == 'customers.global_search' }}" aria-label="Global search">
+      </form>
+      <div class="spacer"></div>
+      {% block topbar_extra %}{% endblock %}
+      <div class="theme-toggle" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-set="light" aria-pressed="true">{{ icon('sun', 'sm') }}<span>Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false">{{ icon('moon', 'sm') }}<span>Dark</span></button>
+      </div>
+      {% if current_user.can('alerts') %}
+      <a class="icon-btn" href="{{ url_for('alerts.index') }}" aria-label="Alerts">{{ icon('bell') }}{% if unread_alerts %}<span class="dot">{{ unread_alerts if unread_alerts < 100 else '99+' }}</span>{% endif %}</a>
+      {% endif %}
+      <div class="user-chip">
+        <button type="button" data-dropdown="user-menu" aria-haspopup="true">
+          <span class="avatar">{{ current_user.initials }}</span>
+          <span class="user-meta"><strong>{{ current_user.name }}</strong><br><span class="role">{{ current_user.role.name }}</span></span>
+          {{ icon('chev-down', 'sm') }}
+        </button>
+        <div class="dropdown hidden" id="user-menu">
+          <div class="small muted dd-label">{{ current_user.email }}</div>
+          <hr>
+          <a href="{{ url_for('settings.profile') }}">{{ icon('customer', 'sm') }} My profile</a>
+          <a href="{{ url_for('settings.change_password') }}">{{ icon('key', 'sm') }} Change password</a>
+          <a href="{{ url_for('settings.mfa_setup') }}">{{ icon('shield', 'sm') }} Two-factor authentication</a>
+          <hr>
+          <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf() }}<button class="link" type="submit">{{ icon('logout', 'sm') }} Sign out</button></form>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flashes">
+          {% for cat, msg in messages %}<div class="flash {{ cat if cat in ('success','danger','warning','info') else 'info' }}" role="status">
+            {{ icon('alert' if cat in ('danger','warning') else 'check', 'sm') }}<span>{{ msg }}</span><button class="x" aria-label="Dismiss">{{ icon('x', 'sm') }}</button></div>{% endfor %}
+        </div>{% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="confirm-modal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h3>{{ icon('alert') }}<span data-confirm-title>Please confirm</span></h3>
+    <p data-confirm-text></p>
+    <div class="actions">
+      <button type="button" class="btn" data-confirm-cancel>Cancel</button>
+      <button type="button" class="btn primary" data-confirm-ok>Confirm</button>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

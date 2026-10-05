@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Login history{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), ('Login history', None)]) }}
+<div class="page-head"><div><h1>Login History</h1><p>Every sign-in attempt, successful or not.</p></div>
+  <div class="seg"><a href="{{ url_for('users.login_history') }}" class="{{ 'on' if not request.args.get('failed') }}">All</a>
+    <a href="{{ url_for('users.login_history', failed=1) }}" class="{{ 'on' if request.args.get('failed') }}">Failed only</a></div></div>
+<div class="card">
+  <div class="card-body flush table-wrap">
+    {% if rows.items %}
+    <table class="table">
+      <thead><tr><th>Timestamp</th><th>Email</th><th>Result</th><th>Reason</th><th>IP address</th><th>Device</th></tr></thead>
+      <tbody>{% for h in rows.items %}
+        <tr><td class="nowrap">{{ h.timestamp|dt }}</td><td>{{ h.email }}</td><td>{{ badge('Success' if h.success else 'Failed') }}</td><td>{{ h.reason }}</td>
+          <td class="mono">{{ h.ip_address }}</td><td class="small muted">{{ (h.user_agent or '')[:70] }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No login attempts recorded.', 'clock') }}{% endif %}
+  </div>
+  {{ pager(rows, 'users.login_history') }}
+</div>
+{% endblock %}

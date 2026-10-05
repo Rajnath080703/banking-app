@@ -1,0 +1,8 @@
+Flask>=3.0
+Flask-SQLAlchemy>=3.1
+Flask-Login>=0.6
+cryptography>=42
+pyotp>=2.9
+qrcode[pil]>=7.4
+openpyxl>=3.1
+reportlab>=4.0

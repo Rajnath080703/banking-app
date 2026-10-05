@@ -1,0 +1,46 @@
+{% from "macros.html" import icon, csrf with context %}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sign in{% endblock %} · {{ bank_name }} Ops</title>
+  <script src="{{ url_for('static', filename='js/theme-init.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/design.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%231f4fd8'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="auth-wrap">
+  <section class="auth-side">
+    <div class="brand"><div class="brand-mark">{{ icon('loan') }}</div>
+      <div><div class="brand-name">{{ bank_name }}</div><div class="brand-sub">Customer 360 · Ops</div></div></div>
+    <div>
+      <h2>One secure workspace for every branch operation.</h2>
+      <p>Customer 360, loans, approvals, KYC, alerts and a complete audit trail — for authorised bank employees only.</p>
+      <ul>
+        <li>{{ icon('shield') }} Role-based access with fine-grained permissions</li>
+        <li>{{ icon('approval') }} Maker-checker approvals for sensitive operations</li>
+        <li>{{ icon('lock') }} Encrypted customer data, MFA and session timeout</li>
+        <li>{{ icon('audit') }} Every login, view and change is audit-logged</li>
+      </ul>
+    </div>
+    <div class="small">Unauthorised access is prohibited and monitored.</div>
+  </section>
+  <section class="auth-main">
+    <div class="top">
+      <div class="theme-toggle" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-set="light" aria-pressed="true">{{ icon('sun', 'sm') }}<span>Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false">{{ icon('moon', 'sm') }}<span>Dark</span></button>
+      </div>
+    </div>
+    <div class="auth-card">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flashes">{% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

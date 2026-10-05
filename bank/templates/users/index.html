@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs with context %}
+{% block title %}User Management{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', None)]) }}
+<div class="page-head"><div><h1>Employee Management & Permissions</h1><p>Add employees by email, assign roles and control access.</p></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('users.roles') }}">{{ icon('key', 'sm') }} Roles & permissions</a>
+    <a class="btn" href="{{ url_for('users.login_history') }}">{{ icon('clock', 'sm') }} Login history</a>
+    {% if current_user.can('user_management', 'create') %}<a class="btn primary" href="{{ url_for('users.new') }}">{{ icon('user-plus', 'sm') }} Add employee</a>{% endif %}
+  </div></div>
+<div class="card">
+  <div class="card-head">
+    <form method="get" class="filters">
+      <input type="search" name="q" value="{{ term }}" placeholder="Name or email">
+      <select name="role" data-autosubmit><option value="">All roles</option>{% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if role_id == r.id }}>{{ r.name }}</option>{% endfor %}</select>
+      <button class="btn">{{ icon('search', 'sm') }}</button>
+    </form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if employees %}
+    <table class="table">
+      <thead><tr><th>Employee</th><th>Role</th><th>Branch</th><th>MFA</th><th>Last login</th><th>Status</th><th></th></tr></thead>
+      <tbody>{% for e in employees %}
+        <tr><td><div class="cust-head"><span class="avatar">{{ e.initials }}</span><div><div class="primary-cell">{{ e.name }}{% if e.id == current_user.id %} <span class="small muted">(you)</span>{% endif %}</div><div class="sub-cell">{{ e.email }} · {{ e.employee_code }}</div></div></div></td>
+          <td>{{ badge(e.role.name, 'primary' if e.role.level >= 80 else 'neutral') }}</td><td>{{ e.branch.name if e.branch else '—' }}</td>
+          <td>{{ badge('On', 'success') if e.mfa_enabled else badge('Off', 'neutral') }}</td><td class="nowrap">{{ e.last_login|dt }}</td>
+          <td>{% if e.locked_until and e.locked_until > now.utcnow() %}{{ badge('Locked', 'danger') }}{% elif e.is_active_flag %}{{ badge('Active') }}{% else %}{{ badge('Disabled', 'neutral') }}{% endif %}</td>
+          <td class="right">{% if can_manage(e) and current_user.can('user_management', 'edit') %}<a class="btn sm" href="{{ url_for('users.edit', eid=e.id) }}">Manage</a>{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No employees found.', 'users') }}{% endif %}
+  </div>
+</div>
+{% endblock %}

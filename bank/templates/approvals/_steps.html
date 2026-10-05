@@ -1,0 +1,14 @@
+{% from "macros.html" import icon %}
+{% set rejected_at_check = r.status == 'Rejected' and r.approver_id == r.checker_id %}
+{% set s2 = 'current' if r.status == 'Pending Review' else 'rejected' if rejected_at_check else 'done' %}
+{% set s3 = 'done' if r.status == 'Approved' else 'current' if r.status == 'Reviewed' else 'rejected' if r.status == 'Rejected' and not rejected_at_check else '' %}
+<div class="steps">
+  <div class="step done"><div class="circle">{{ icon('check', 'sm') }}</div><div class="s-title">Maker created</div>
+    <div class="s-meta">{{ r.maker.name }}<br>{{ r.created_at|dt }}</div></div>
+  <div class="step {{ s2 }}"><div class="circle">{{ icon('x' if s2 == 'rejected' else 'eye', 'sm') }}</div><div class="s-title">Checker review</div>
+    <div class="s-meta">{{ r.checker.name if r.checker else 'Awaiting review' }}{% if r.checked_at %}<br>{{ r.checked_at|dt }}{% endif %}</div></div>
+  <div class="step {{ s3 }}"><div class="circle">{{ icon('x' if s3 == 'rejected' else 'check', 'sm') }}</div><div class="s-title">Manager decision</div>
+    <div class="s-meta">{% if r.decided_at and not rejected_at_check %}{{ r.approver.name }}<br>{{ r.decided_at|dt }}{% else %}{{ 'Not required' if rejected_at_check else 'Awaiting decision' }}{% endif %}</div></div>
+  <div class="step {{ 'done' if r.status in ('Approved', 'Rejected') else '' }}"><div class="circle">{{ icon('audit', 'sm') }}</div><div class="s-title">Audit log updated</div>
+    <div class="s-meta">{{ 'Recorded' if r.status in ('Approved', 'Rejected') else 'On completion' }}</div></div>
+</div>

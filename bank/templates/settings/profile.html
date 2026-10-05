@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs with context %}
+{% block title %}My profile{% endblock %}
+{% block content %}
+{{ crumbs([('My profile', None)]) }}
+<div class="card mb"><div class="card-body"><div class="cust-head">
+  <span class="avatar lg">{{ current_user.initials }}</span>
+  <div class="grow"><h1>{{ current_user.name }}</h1>
+    <div class="meta"><span>{{ icon('mail', 'sm') }} {{ current_user.email }}</span><span>{{ icon('key', 'sm') }} {{ current_user.role.name }}</span>
+      <span>{{ icon('branch', 'sm') }} {{ current_user.branch.name if current_user.branch else '—' }}</span><span>{{ icon('id', 'sm') }} {{ current_user.employee_code }}</span></div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('settings.change_password') }}">{{ icon('key', 'sm') }} Change password</a>
+    <a class="btn" href="{{ url_for('settings.mfa_setup') }}">{{ icon('shield', 'sm') }} {{ 'Manage' if current_user.mfa_enabled else 'Enable' }} MFA</a></div>
+</div></div></div>
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>Account security</h2></div><div class="card-body">
+    <dl class="kv"><dt>Two-factor auth</dt><dd>{{ badge('Enabled', 'success') if current_user.mfa_enabled else badge('Not enabled', 'warning') }}</dd>
+      <dt>Password changed</dt><dd>{{ current_user.password_changed_at|dt }}</dd><dt>Last sign-in</dt><dd>{{ current_user.last_login|dt }}</dd>
+      <dt>Session timeout</dt><dd>{{ session_timeout }} minutes of inactivity</dd></dl>
+  </div></div>
+  <div class="card"><div class="card-head"><h2>My recent sign-ins</h2></div><div class="card-body flush table-wrap">
+    {% if history %}<table class="table"><tbody>{% for h in history %}<tr><td class="nowrap small">{{ h.timestamp|dt }}</td><td>{{ badge('Success' if h.success else 'Failed') }}</td><td class="small muted mono">{{ h.ip_address }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}{{ empty('No sign-ins recorded.', 'clock') }}{% endif %}
+  </div></div>
+</div>
+{% endblock %}

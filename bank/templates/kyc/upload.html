@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Upload document{% endblock %}
+{% block content %}
+{{ crumbs([('KYC & Documents', url_for('kyc.index')), ('Upload', None)]) }}
+<div class="page-head"><div><h1>Upload a document</h1><p>PDF, PNG or JPG up to 10 MB. Document numbers are stored encrypted. A different employee must verify the upload.</p></div></div>
+{% if not customer %}{% include "_customer_picker.html" %}{% else %}
+<div class="card"><div class="card-body">
+  <dl class="kv mb"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span> · KYC {{ customer.kyc_status }}</dd></dl>
+  <form method="post" enctype="multipart/form-data" class="form-grid">
+    {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
+    <div class="field"><label for="doc_type">Document type</label><select id="doc_type" name="doc_type">{% for t in doc_types %}<option>{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="doc_number">Document number</label><input id="doc_number" name="doc_number" autocomplete="off"></div>
+    <div class="field"><label for="issue_date">Issue date</label><input id="issue_date" name="issue_date" type="date"></div>
+    <div class="field"><label for="expiry_date">Expiry date</label><input id="expiry_date" name="expiry_date" type="date"><div class="hint">Leave blank for documents that don't expire.</div></div>
+    <div class="field"><label for="loan_id">Link to loan (optional)</label><select id="loan_id" name="loan_id"><option value="">— KYC / general —</option>
+      {% for l in loans %}<option value="{{ l.id }}" {{ 'selected' if request.args.get('loan')|int == l.id }}>{{ l.loan_number }} · {{ l.type_label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="file">File</label><input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg"></div>
+    <div class="field full"><label for="remarks">Remarks</label><input id="remarks" name="remarks" maxlength="250"></div>
+    <div class="full actions"><button class="btn primary">{{ icon('upload', 'sm') }} Upload</button>
+      <a class="btn ghost" href="{{ url_for('customers.profile', cid=customer.id, tab='documents') if current_user.can('customer_profile') else url_for('kyc.index') }}">Cancel</a></div>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}

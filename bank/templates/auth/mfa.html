@@ -1,0 +1,17 @@
+{% extends "auth/layout.html" %}
+{% block title %}Verify{% endblock %}
+{% block content %}
+<h1>Two-factor verification</h1>
+<p class="muted">Enter the 6-digit code from your authenticator app for <strong>{{ email }}</strong>.</p>
+<div class="card">
+  <form method="post">
+    {{ csrf() }}
+    <div class="field">
+      <label for="code">Verification code</label>
+      <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code">
+    </div>
+    <button class="btn primary block" type="submit">Verify and continue</button>
+  </form>
+</div>
+<p class="small mt"><a href="{{ url_for('auth.login') }}">← Back to sign in</a></p>
+{% endblock %}

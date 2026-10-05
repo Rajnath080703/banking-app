@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Deposits & FD{% endblock %}
+{% block content %}
+{{ crumbs([('Deposits & FD', None)]) }}
+<div class="page-head"><div><h1>Deposits & Fixed Deposits</h1><p>CASA balances and term deposit book.</p></div></div>
+<div class="kpis mb">
+  <div class="kpi"><span class="kpi-label">Savings balance</span><span class="kpi-value">{{ casa.get('Savings', 0)|inr_short }}</span></div>
+  <div class="kpi"><span class="kpi-label">Current balance</span><span class="kpi-value">{{ casa.get('Current', 0)|inr_short }}</span></div>
+  <div class="kpi"><span class="kpi-label">Active FDs</span><span class="kpi-value">{{ stats.get('Active', 0)|inr_short }}</span></div>
+  <div class="kpi"><span class="kpi-label">Matured FDs</span><span class="kpi-value">{{ stats.get('Matured', 0)|inr_short }}</span></div>
+  <div class="kpi"><span class="kpi-label">Pending approval</span><span class="kpi-value">{{ stats.get('Pending', 0)|inr_short }}</span></div>
+</div>
+<div class="card">
+  <div class="card-head">
+    <div class="seg">{% for s in ['', 'Active', 'Matured', 'Pending', 'Closed'] %}<a href="{{ url_for('deposits.index', status=s, q=term) }}" class="{{ 'on' if status == s and not request.args.get('maturing') }}">{{ s or 'All' }}</a>{% endfor %}
+      <a href="{{ url_for('deposits.index', maturing=1) }}" class="{{ 'on' if request.args.get('maturing') }}">Maturing in 30 days</a></div>
+    <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
+      <input type="search" name="q" value="{{ term }}" placeholder="FD no / customer / account"><button class="btn">{{ icon('search', 'sm') }}</button></form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if fds.items %}
+    <table class="table">
+      <thead><tr><th>FD No</th><th>Customer</th><th class="num">Principal</th><th class="num">Rate</th><th>Tenure</th><th>Start</th><th>Maturity</th><th class="num">Maturity value</th><th>Status</th></tr></thead>
+      <tbody>{% for fd in fds.items %}
+        <tr><td class="mono primary-cell">{{ fd.fd_number }}</td>
+          <td>{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=fd.customer_id, tab='deposits') }}">{{ fd.customer.name }}</a>{% else %}{{ fd.customer.name }}{% endif %}</td>
+          <td class="num">{{ fd.principal|inr }}</td><td class="num">{{ fd.interest_rate }}%</td><td>{{ fd.tenure_months }} m</td>
+          <td>{{ fd.start_date|d }}</td><td>{{ fd.maturity_date|d }}</td><td class="num">{{ fd.maturity_amount|inr }}</td><td>{{ badge(fd.status) }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No deposits match the filters.', 'piggy') }}{% endif %}
+  </div>
+  {{ pager(fds, 'deposits.index') }}
+</div>
+{% endblock %}

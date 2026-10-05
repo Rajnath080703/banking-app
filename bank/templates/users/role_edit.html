@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, csrf, page_title, perm_grid with context %}
+{% block title %}{{ role.name }} permissions{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), ('Roles', url_for('users.roles')), (role.name, None)]) }}
+<form method="post" data-confirm="Save permission changes for {{ role.name }}? Every employee with this role is affected immediately." data-confirm-title="Change permissions" data-confirm-ok="Save permissions">
+  {{ csrf() }}
+  <div class="page-head">
+    {{ page_title(role.name ~ ' · Permissions', url_for('users.roles'), (role.description or '') ~ ' · Level ' ~ role.level) }}
+    {% if editable %}<div class="actions"><a class="btn" href="{{ url_for('users.roles') }}">Cancel</a><button class="btn primary">{{ icon('check', 'sm') }} Save</button></div>{% endif %}
+  </div>
+  {% if role.level >= 100 %}<div class="notice mb">{{ icon('shield', 'sm') }} Super Admin always has every permission. This cannot be changed.</div>{% endif %}
+  {% if not editable and role.level < 100 %}<div class="notice warning mb">{{ icon('lock', 'sm') }} You can view but not change this role.</div>{% endif %}
+  {% if editable and not role.is_system %}<div class="card mb"><div class="card-body"><label for="description">Description</label><input id="description" name="description" value="{{ role.description or '' }}"></div></div>{% endif %}
+  <div class="card">
+    <div class="card-head"><h2>Permissions</h2>
+      {% if editable %}<div class="filters">{% for a in actions %}<label class="check small"><input type="checkbox" data-check-col="{{ a }}"> All {{ a }}</label>{% endfor %}</div>{% endif %}</div>
+    <div class="card-body">
+      {{ perm_grid(modules, actions, grants, editable=editable, all_on=role.level >= 100) }}
+      {% if editable %}<p class="small muted mt">You cannot grant rights you don't hold yourself.</p>{% endif %}
+    </div>
+  </div>
+</form>
+{% endblock %}

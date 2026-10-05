@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% block title %}{{ t.ticket_number }}{% endblock %}
+{% block content %}
+{{ crumbs([('Tickets', url_for('tickets.index')), (t.ticket_number, None)]) }}
+<div class="page-head"><div><h1>{{ t.subject }} {{ badge(t.status) }}</h1>
+  <p><span class="mono">{{ t.ticket_number }}</span> · {{ t.customer.name }} · raised {{ t.created_at|dt }} by {{ t.creator.name if t.creator else '—' }}</p></div></div>
+<div class="grid g-12">
+  <div class="stack">
+    <div class="card"><div class="card-head"><h2>Details</h2></div><div class="card-body">
+      <dl class="kv"><dt>Customer</dt><dd>{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=t.customer_id, tab='tickets') }}">{{ t.customer.name }}</a>{% else %}{{ t.customer.name }}{% endif %}</dd>
+        <dt>Category</dt><dd>{{ t.category }}</dd><dt>Priority</dt><dd>{{ badge(t.priority) }}</dd>
+        <dt>Assigned to</dt><dd>{{ t.assignee.name if t.assignee else 'Unassigned' }}</dd>
+        <dt>Last update</dt><dd>{{ t.updated_at|dt }}</dd><dt>Resolved</dt><dd>{{ t.resolved_at|dt }}</dd></dl>
+      <hr class="divider"><p>{{ t.description or 'No description.' }}</p>
+    </div></div>
+    {% if current_user.can('tickets', 'edit') %}
+    <div class="card"><div class="card-head"><h2>Update ticket</h2></div><div class="card-body">
+      <form method="post">
+        {{ csrf() }}
+        <div class="field"><label for="status">Status</label><select id="status" name="status">{% for s in statuses %}<option {{ 'selected' if t.status == s }}>{{ s }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="assigned_to">Assign to</label><select id="assigned_to" name="assigned_to"><option value="">—</option>
+          {% for e in staff %}<option value="{{ e.id }}" {{ 'selected' if t.assigned_to == e.id }}>{{ e.name }} · {{ e.role.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="note">Note</label><textarea id="note" name="note"></textarea></div>
+        <button class="btn primary block">Save update</button>
+      </form>
+    </div></div>
+    {% endif %}
+  </div>
+  <div class="card"><div class="card-head"><h2>History</h2></div><div class="card-body">
+    {% if notes %}<ul class="timeline">{% for n in notes %}
+      <li><span class="dot"></span><div class="t-title">{{ n.status_change or 'Note' }}</div>
+        <div class="t-meta">{{ n.employee.name if n.employee else 'System' }} · {{ n.timestamp|dt }}</div>{% if n.note %}<p class="mt">{{ n.note }}</p>{% endif %}</li>
+    {% endfor %}</ul>{% else %}{{ empty('No updates yet.') }}{% endif %}
+  </div></div>
+</div>
+{% endblock %}

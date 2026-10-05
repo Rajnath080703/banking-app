@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% block title %}{{ loan.loan_number }}{% endblock %}
+{% block content %}
+{{ crumbs([('Loans', url_for('loans.index')), (loan.type_label, url_for('loans.gold') if loan.loan_type == 'gold' else url_for('loans.by_type', loan_type=loan.loan_type)), (loan.loan_number, None)]) }}
+<div class="page-head">
+  <div><h1>{{ loan.type_label }} · <span class="mono">{{ loan.loan_number }}</span> {{ badge('Pending Approval' if loan.status == 'Pending' else loan.status, loan.status|tone) }}</h1>
+    <p>{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=loan.customer_id, tab='loans') }}">{{ loan.customer.name }}</a>{% else %}{{ loan.customer.name }}{% endif %}
+      · <span class="mono">{{ loan.customer.customer_code }}</span> · {{ loan.branch.name }}</p></div>
+</div>
+
+{% set paid_pct = ((loan.amount - loan.outstanding) / loan.amount * 100) if loan.amount and loan.status != 'Pending' else 0 %}
+<div class="kpis mb">
+  <div class="kpi"><span class="kpi-label">Loan amount</span><span class="kpi-value">{{ loan.amount|inr }}</span><span class="kpi-foot">{{ loan.tenure_months }} months @ {{ loan.interest_rate }}%</span></div>
+  <div class="kpi"><span class="kpi-label">Outstanding</span><span class="kpi-value">{{ loan.outstanding|inr }}</span>
+    <div class="progress success"><span data-width="{{ paid_pct }}"></span></div><span class="kpi-foot">{{ '%.0f'|format(paid_pct) }}% repaid</span></div>
+  <div class="kpi"><span class="kpi-label">EMI</span><span class="kpi-value">{{ loan.emi|inr }}</span><span class="kpi-foot">Next due {{ loan.next_due_date|d }}</span></div>
+  <div class="kpi"><span class="kpi-label">Overdue status</span><span class="kpi-value {{ 'neg' if loan.overdue_days else 'pos' }}">{{ loan.overdue_days ~ ' days' if loan.status == 'Overdue' else 'On track' if loan.status == 'Active' else '—' }}</span><span class="kpi-foot">{{ loan.status }}</span></div>
+  <div class="kpi"><span class="kpi-label">Interest paid</span><span class="kpi-value">{{ loan.total_interest_paid|inr }}</span><span class="kpi-foot">Principal repaid {{ loan.total_principal_paid|inr }}</span></div>
+</div>
+
+<div class="grid g-12">
+  <div class="stack">
+    <div class="card"><div class="card-head"><h2>Loan details</h2></div><div class="card-body">
+      <dl class="kv">
+        <dt>Account number</dt><dd class="mono">{{ loan.account.account_number if loan.account else '—' }}</dd>
+        <dt>Customer</dt><dd>{{ loan.customer.name }}</dd>
+        <dt>Loan type</dt><dd>{{ loan.type_label }}</dd>
+        <dt>Purpose</dt><dd>{{ loan.purpose or '—' }}</dd>
+        <dt>Disbursed on</dt><dd>{{ loan.disbursed_on|d }}</dd>
+        <dt>Interest rate</dt><dd>{{ loan.interest_rate }}% p.a. (reducing)</dd>
+        <dt>Tenure</dt><dd>{{ loan.tenure_months }} months</dd>
+        <dt>Due date</dt><dd>{{ loan.next_due_date|d }}</dd>
+        {% if loan.collateral %}<dt>Collateral</dt><dd>{{ loan.collateral }}</dd>{% endif %}
+      </dl>
+    </div></div>
+    {% if loan.loan_type == 'gold' %}
+    <div class="card"><div class="card-head"><h2>{{ icon('gold') }} Gold details</h2></div><div class="card-body">
+      <dl class="kv"><dt>Gold weight</dt><dd><strong>{{ loan.gold_weight_grams }} g</strong></dd><dt>Purity</dt><dd>{{ loan.gold_purity }}</dd>
+        <dt>Items</dt><dd>{{ loan.gold_items or '—' }}</dd><dt>Valuation</dt><dd>{{ loan.gold_valuation|inr }}</dd>
+        <dt>Loan-to-value</dt><dd>{{ '%.0f'|format(loan.amount / loan.gold_valuation * 100) if loan.gold_valuation else '—' }}%</dd></dl>
+    </div></div>
+    {% endif %}
+    {% if current_user.can('loans', 'edit') and loan.status in ('Active', 'Overdue') %}
+    <div class="card"><div class="card-head"><h2>Post repayment</h2></div><div class="card-body">
+      <form method="post" action="{{ url_for('loans.repay', lid=loan.id) }}" data-confirm="Post this repayment against {{ loan.loan_number }}?" data-confirm-title="Confirm repayment" data-confirm-ok="Post repayment">
+        {{ csrf() }}
+        <div class="field"><label for="amount">Amount (₹)</label><input id="amount" name="amount" type="number" step="0.01" min="1" value="{{ '%.2f'|format(loan.emi) }}" required></div>
+        <div class="field"><label for="mode">Mode</label><select id="mode" name="mode">
+          {% for m in ['Cash', 'NEFT', 'UPI', 'Cheque'] + (['Account debit'] if loan.account else []) %}<option>{{ m }}</option>{% endfor %}</select></div>
+        <button class="btn primary block">{{ icon('rupee', 'sm') }} Post repayment</button>
+      </form>
+    </div></div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card"><div class="card-head"><h2>Approval history</h2></div><div class="card-body">
+      {% if approvals %}
+        {% for r in approvals %}
+        {% include "approvals/_steps.html" %}
+        <p class="small muted mt"><a class="mono" href="{{ url_for('approvals.detail', rid=r.id) }}">{{ r.request_number }}</a> · {{ badge(r.status) }}
+          {% if r.checker_remarks %} · Checker: “{{ r.checker_remarks }}”{% endif %}{% if r.approver_remarks %} · Decision: “{{ r.approver_remarks }}”{% endif %}</p>
+        {% endfor %}
+      {% else %}<p class="muted">No approval workflow recorded for this loan (migrated / legacy loan).</p>{% endif %}
+    </div></div>
+
+    {% if schedule %}
+    <div class="card"><div class="card-head"><h2>Upcoming EMIs <span class="sub">· projected</span></h2></div>
+      <div class="card-body flush table-wrap"><table class="table">
+        <thead><tr><th>Due date</th><th class="num">EMI</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Balance after</th></tr></thead>
+        <tbody>{% for s in schedule %}<tr><td>{{ s.due|d }}</td><td class="num">{{ s.emi|inr }}</td><td class="num">{{ s.principal|inr }}</td><td class="num">{{ s.interest|inr }}</td><td class="num">{{ s.balance|inr }}</td></tr>{% endfor %}</tbody>
+      </table></div></div>
+    {% endif %}
+
+    <div class="card"><div class="card-head"><h2>Repayment history <span class="sub">· {{ repayments|length }} payments</span></h2></div>
+      <div class="card-body flush table-wrap">
+      {% if repayments %}<table class="table">
+        <thead><tr><th>Paid on</th><th>Due date</th><th class="num">Amount</th><th class="num">Principal</th><th class="num">Interest</th><th>Mode</th><th>Status</th></tr></thead>
+        <tbody>{% for r in repayments %}<tr><td>{{ r.paid_on|d }}</td><td>{{ r.due_date|d }}</td><td class="num"><strong>{{ r.amount|inr }}</strong></td>
+          <td class="num">{{ r.principal_component|inr }}</td><td class="num">{{ r.interest_component|inr }}</td><td>{{ r.mode }}</td><td>{{ badge(r.status) }}</td></tr>{% endfor %}</tbody>
+      </table>{% else %}{{ empty('No repayments yet.', 'rupee') }}{% endif %}
+    </div></div>
+
+    <div class="card"><div class="card-head"><h2>Loan documents</h2>
+      {% if current_user.can('kyc', 'create') %}<a class="btn sm" href="{{ url_for('kyc.upload', customer=loan.customer_id, loan=loan.id) }}">{{ icon('upload', 'sm') }} Upload</a>{% endif %}</div>
+      <div class="card-body flush table-wrap">
+      {% if documents %}<table class="table"><thead><tr><th>Document</th><th>Uploaded</th><th>Status</th><th></th></tr></thead><tbody>
+        {% for d in documents %}<tr><td class="primary-cell">{{ d.doc_type }}</td><td>{{ d.uploaded_at|d }}</td><td>{{ badge(d.status) }}</td>
+          <td class="right">{% if current_user.can('kyc') %}<a class="btn sm" href="{{ url_for('kyc.document', did=d.id) }}">Open</a>{% endif %}</td></tr>{% endfor %}
+      </tbody></table>{% else %}{{ empty('No loan documents.', 'file') }}{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,161 @@
+{% set ICONS = {
+  'dashboard': '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  'customer': '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+  'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5c2.2.7 3.5 2.7 3.5 5.5"/>',
+  'wallet': '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1.2"/>',
+  'loan': '<path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/>',
+  'gold': '<path d="M4 18h7l-1.5-5h-4z"/><path d="M13 18h7l-1.5-5h-4z"/><path d="M8.5 11h7L14 6h-4z"/>',
+  'piggy': '<path d="M19 9.5c1.2.4 2 1.5 2 2.5h-1.5c-.4 1.5-1.4 2.8-2.8 3.6V19h-3v-2h-3.4v2h-3v-3.2A6.3 6.3 0 0 1 4 11c0-3.3 3.1-6 7-6 1.9 0 3.6.6 4.9 1.6L19 5z"/><circle cx="15.5" cy="10" r=".8"/>',
+  'swap': '<path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/>',
+  'shield': '<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
+  'ticket': '<path d="M3 8.5V6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2.5a3.5 3.5 0 0 0 0 7V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2.5a3.5 3.5 0 0 0 0-7z"/><path d="M14 5v14" stroke-dasharray="2 2"/>',
+  'chart': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  'bell': '<path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  'audit': '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+  'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  'search': '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  'moon': '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  'menu': '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  'logout': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  'plus': '<path d="M12 5v14M5 12h14"/>',
+  'check': '<path d="m5 12 5 5L20 7"/>',
+  'x': '<path d="M18 6 6 18M6 6l12 12"/>',
+  'chev-right': '<path d="m9 6 6 6-6 6"/>',
+  'chev-down': '<path d="m6 9 6 6 6-6"/>',
+  'alert': '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  'file': '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  'download': '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  'upload': '<path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/>',
+  'branch': '<path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6M9 11h.01M15 11h.01"/>',
+  'approval': '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8.5 12 2.5 2.5L16 9.5"/>',
+  'eye': '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  'lock': '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  'key': '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l2 2"/>',
+  'trend-up': '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  'trend-down': '<path d="m3 7 6 6 4-4 8 8"/><path d="M15 17h6v-6"/>',
+  'refresh': '<path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/>',
+  'calendar': '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  'phone': '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+  'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  'id': '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.5 1.7-2.3 3-2.3s2.5.8 3 2.3M15 10h3M15 14h3"/>',
+  'pin': '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  'rupee': '<path d="M6 4h12M6 9h12M14.5 4c3.5 0 3.5 10-3.5 10H6l8.5 7"/>',
+  'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  'activity': '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  'user-plus': '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3.1-7 7-7s7 3 7 7"/><path d="M19 8v6M16 11h6"/>',
+  'filter': '<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z"/>',
+  'edit': '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  'flag': '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  'arrow-left': '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  'user-round': '<circle cx="12" cy="8.5" r="4.5"/><path d="M3.5 21a8.5 8.5 0 0 1 17 0"/>',
+} %}
+
+{% macro trend(pct, cmp=None) -%}
+{% if pct is none %}<span class="trend flat">—{% if cmp %}<span class="cmp">{{ cmp }}</span>{% endif %}</span>
+{% else %}<span class="trend {{ 'up' if pct > 0 else 'down' if pct < 0 else 'flat' }}">{{ icon('arrow-up' if pct > 0 else 'arrow-down' if pct < 0 else 'chev-right') }}{{ '+' if pct > 0 }}{{ pct }}%{% if cmp %}<span class="cmp">{{ cmp }}</span>{% endif %}</span>{% endif %}
+{%- endmacro %}
+
+{% set MODULE_ICONS = {'user_management': 'users', 'customer_accounts': 'wallet', 'customer_profile': 'customer',
+  'transactions': 'swap', 'accounting': 'chart', 'loans': 'rupee', 'loan_approval': 'approval', 'interest': 'trend-up',
+  'deposits': 'piggy', 'kyc': 'shield', 'tickets': 'ticket', 'reports': 'chart', 'branch_management': 'branch',
+  'audit_logs': 'audit', 'alerts': 'bell', 'settings': 'settings'} %}
+
+{# granted: {module: [actions]} ; can_grant(module, action) -> bool #}
+{% macro perm_grid(modules, actions, granted, editable=True, all_on=False) -%}
+<div class="perm-grid">
+  {% for m, label in modules %}
+  <div class="perm-card">
+    <div class="head">{{ icon(MODULE_ICONS.get(m, 'key'), 'sm') }}{{ label }}</div>
+    <div class="acts">
+      {% for a in actions %}
+        {% set on = all_on or a in granted.get(m, []) %}
+        <label><input type="checkbox" name="{{ m }}:{{ a }}" data-col="{{ a }}" data-row="{{ m }}" {{ 'checked' if on }}
+               {{ 'disabled' if not editable or not current_user.can(m, a) }}><span>{{ a|capitalize }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro page_title(title, back=None, sub=None) -%}
+<div><div class="title-row">{% if back %}<a class="back" href="{{ back }}" aria-label="Back">{{ icon('arrow-left') }}</a>{% endif %}<h1>{{ title }}</h1></div>
+{% if sub %}<p>{{ sub }}</p>{% endif %}</div>
+{%- endmacro %}
+
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" viewBox="0 0 24 24" aria-hidden="true">{{ ICONS.get(name, '')|safe }}</svg>
+{%- endmacro %}
+
+{% macro badge(text, tone=None) -%}
+<span class="badge {{ tone or (text|tone) }}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro kpi(label, value, icon_name, tone='', foot=None, href=None) -%}
+{% set inner %}
+  <div class="kpi-top"><span class="kpi-label">{{ label }}</span><span class="kpi-icon {{ tone }}">{{ icon(icon_name, 'sm') }}</span></div>
+  <div class="kpi-value">{{ value }}</div>
+  {% if foot %}<div class="kpi-foot">{{ foot }}</div>{% endif %}
+{% endset %}
+{% if href %}<a href="{{ href }}" class="kpi">{{ inner }}</a>{% else %}<div class="kpi">{{ inner }}</div>{% endif %}
+{%- endmacro %}
+
+{% macro empty(text='Nothing to show yet.', icon_name='file') -%}
+<div class="empty">{{ icon(icon_name) }}{{ text }}</div>
+{%- endmacro %}
+
+{% macro crumbs(items) -%}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('dashboard.index') }}">Home</a>
+  {% for label, href in items %}
+    {{ icon('chev-right') }}
+    {% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro pager(p, endpoint) -%}
+{% if p.pages > 1 %}
+{% set args = dict(request.view_args or {}) %}
+{% set _ = args.update(request.args.to_dict()) %}
+{% macro page_url(n) %}{% set _ = args.update({'page': n}) %}{{ url_for(endpoint, **args) }}{% endmacro %}
+<div class="pager">
+  <span>Showing {{ (p.page - 1) * p.per_page + 1 }}–{{ [p.page * p.per_page, p.total]|min }} of {{ p.total }}</span>
+  <div class="pages">
+    {% if p.has_prev %}<a href="{{ page_url(p.prev_num) }}">‹ Prev</a>{% endif %}
+    {% for n in p.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+      {% if n %}
+        {% if n == p.page %}<span class="cur">{{ n }}</span>
+        {% else %}<a href="{{ page_url(n) }}">{{ n }}</a>{% endif %}
+      {% else %}<span>…</span>{% endif %}
+    {% endfor %}
+    {% if p.has_next %}<a href="{{ page_url(p.next_num) }}">Next ›</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro range_filter(rkey, start, end, branches=None, selected_branch=None, extra=None) -%}
+<form method="get" class="filters">
+  {% if extra %}{% for k, v in extra.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+  <select name="range" data-range-select aria-label="Date range">
+    {% for k, label in [('today','Today'),('week','This Week'),('month','This Month'),('year','This Year'),('custom','Custom Range')] %}
+      <option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <input type="date" name="start" value="{{ start.isoformat() }}" data-custom-range aria-label="Start date">
+  <input type="date" name="end" value="{{ end.isoformat() }}" data-custom-range aria-label="End date">
+  {% if branches %}
+  <select name="branch" data-autosubmit aria-label="Branch">
+    <option value="">All branches</option>
+    {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if selected_branch == b.id }}>{{ b.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <button class="btn" type="submit" data-custom-range>Apply</button>
+</form>
+{%- endmacro %}
+
+{% macro csrf() -%}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{%- endmacro %}

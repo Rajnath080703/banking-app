@@ -1,0 +1,23 @@
+{% extends "auth/layout.html" %}
+{% block content %}
+<h1>Employee sign in</h1>
+<p class="muted">Use your bank email address and password.</p>
+<div class="card">
+  <form method="post" autocomplete="on">
+    {{ csrf() }}
+    <div class="field">
+      <label for="email">Email address</label>
+      <input type="email" id="email" name="email" value="{{ email or '' }}" required autofocus autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+        <button type="button" data-pw-toggle="password" aria-label="Show password">{{ icon('eye', 'sm') }}</button>
+      </div>
+    </div>
+    <button class="btn primary block" type="submit">{{ icon('lock', 'sm') }} Sign in securely</button>
+  </form>
+</div>
+<p class="small muted mt">Accounts lock after repeated failed attempts. Contact your administrator if you are locked out.</p>
+{% endblock %}

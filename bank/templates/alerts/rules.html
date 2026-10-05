@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Fraud & risk rules{% endblock %}
+{% block content %}
+{{ crumbs([('Alerts & Notifications', url_for('alerts.index')), ('Risk rules', None)]) }}
+<div class="page-head"><div><h1>Fraud / Risk Alert Rules</h1><p>Configurable rules for unusual activity. Alerts are routed to employees who can view the selected module.</p></div></div>
+{% set editable = current_user.can('settings', 'edit') %}
+<form method="post" class="card">
+  {{ csrf() }}
+  <div class="card-body flush table-wrap">
+    <table class="table">
+      <thead><tr><th>Enabled</th><th>Rule</th><th>Threshold</th><th>Window (min)</th><th>Severity</th><th>Route to module</th></tr></thead>
+      <tbody>{% for r in rules %}
+        <tr><td><input type="checkbox" class="check" name="r{{ r.id }}_enabled" {{ 'checked' if r.enabled }} {{ 'disabled' if not editable }} aria-label="Enable {{ r.name }}"></td>
+          <td><div class="primary-cell">{{ r.name }}</div><div class="sub-cell">{{ r.description }}</div></td>
+          <td><input type="number" step="any" name="r{{ r.id }}_threshold" value="{{ r.threshold|int if r.threshold == r.threshold|int else r.threshold }}" {{ 'disabled' if not editable or r.rule_type == 'dormant_activity' }}>
+            <div class="sub-cell">{{ {'high_value_txn': '₹ amount', 'txn_velocity': 'transactions', 'failed_logins': 'attempts', 'dormant_activity': 'n/a'}[r.rule_type] }}</div></td>
+          <td><input type="number" name="r{{ r.id }}_window" value="{{ r.window_minutes }}" {{ 'disabled' if not editable or r.rule_type != 'txn_velocity' }}></td>
+          <td><select name="r{{ r.id }}_severity" {{ 'disabled' if not editable }}>{% for s in ['Low', 'Medium', 'High', 'Critical'] %}<option {{ 'selected' if r.severity == s }}>{{ s }}</option>{% endfor %}</select></td>
+          <td><select name="r{{ r.id }}_route" {{ 'disabled' if not editable }}>{% for m, label in modules %}<option value="{{ m }}" {{ 'selected' if r.route_module == m }}>{{ label }}</option>{% endfor %}</select></td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+  {% if editable %}<div class="pager"><span>Changes apply to new activity immediately.</span><button class="btn primary">Save rules</button></div>{% endif %}
+</form>
+{% endblock %}

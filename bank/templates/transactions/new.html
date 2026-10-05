@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% block title %}Post transaction{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', url_for('transactions.index')), ('Post transaction', None)]) }}
+<div class="page-head"><div><h1>Cash deposit / withdrawal</h1><p>Every transaction is screened by the configured fraud & risk rules.</p></div></div>
+<div class="card mb"><div class="card-body">
+  <form method="get" class="filters">
+    <input type="search" name="account" value="{{ acc_no }}" placeholder="Enter account number" required autofocus>
+    <button class="btn primary">{{ icon('search', 'sm') }} Load account</button>
+  </form>
+</div></div>
+{% if account %}
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>{{ account.customer.name }} · <span class="mono">{{ account.account_number }}</span></h2>{{ badge(account.status) }}</div>
+    <div class="card-body">
+      <div class="stat-row mb"><div class="stat"><div class="label">Available balance</div><div class="value">{{ account.balance|inr(2) }}</div></div>
+        <div class="stat"><div class="label">Type</div><div class="value">{{ account.account_type }}</div></div></div>
+      {% if account.status in ('Closed', 'Pending') %}
+        <div class="notice warning">{{ icon('lock', 'sm') }} Transactions are not allowed on a {{ account.status|lower }} account.</div>
+      {% else %}
+      <form method="post" class="form-grid" data-confirm="Post this transaction? This cannot be undone from this screen." data-confirm-title="Confirm transaction" data-confirm-ok="Post">
+        {{ csrf() }}
+        <div class="field"><label for="txn_type">Type</label><select id="txn_type" name="txn_type"><option value="Credit">Deposit (credit)</option><option value="Debit">Withdrawal (debit)</option></select></div>
+        <div class="field"><label for="amount">Amount (₹)</label><input id="amount" name="amount" type="number" step="0.01" min="1" required></div>
+        <div class="field"><label for="channel">Channel</label><select id="channel" name="channel">{% for c in ['Cash', 'Cheque', 'NEFT', 'IMPS', 'UPI', 'Transfer'] %}<option>{{ c }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="description">Narration</label><input id="description" name="description" maxlength="200"></div>
+        <div class="full"><button class="btn primary">{{ icon('check', 'sm') }} Post transaction</button></div>
+      </form>
+      {% endif %}
+    </div></div>
+  <div class="card"><div class="card-head"><h2>Recent transactions</h2></div>
+    <div class="card-body flush table-wrap">
+      {% if recent %}<table class="table"><tbody>{% for t in recent %}
+        <tr><td class="nowrap small">{{ t.timestamp|dt }}</td><td>{{ t.description }}</td>
+          <td class="num {{ 'pos' if t.txn_type == 'Credit' else 'neg' }}">{{ '+' if t.txn_type == 'Credit' else '−' }}{{ t.amount|inr(2) }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}{{ empty('No transactions yet.', 'swap') }}{% endif %}
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

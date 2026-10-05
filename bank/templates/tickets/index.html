@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% block title %}Tickets{% endblock %}
+{% block content %}
+{{ crumbs([('Tickets', None)]) }}
+<div class="page-head"><div><h1>Customer Support & Tickets</h1><p>Complaints and service requests raised at the branch.</p></div>
+  {% if current_user.can('tickets', 'create') %}<div class="actions"><a class="btn primary" href="{{ url_for('tickets.new') }}">{{ icon('plus', 'sm') }} New ticket</a></div>{% endif %}</div>
+<div class="card">
+  <div class="card-head">
+    <div class="seg">
+      <a href="{{ url_for('tickets.index', q=term) }}" class="{{ 'on' if not status and not request.args.get('mine') }}">All<span class="n">{{ counts.values()|sum }}</span></a>
+      {% for s in statuses %}<a href="{{ url_for('tickets.index', status=s, q=term) }}" class="{{ 'on' if status == s }}">{{ s }}<span class="n">{{ counts.get(s, 0) }}</span></a>{% endfor %}
+      <a href="{{ url_for('tickets.index', mine=1) }}" class="{{ 'on' if request.args.get('mine') }}">Assigned to me</a>
+    </div>
+    <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
+      <input type="search" name="q" value="{{ term }}" placeholder="Ticket no / customer"><button class="btn">{{ icon('search', 'sm') }}</button></form>
+  </div>
+  <div class="card-body flush table-wrap">
+    {% if tickets.items %}
+    <table class="table">
+      <thead><tr><th>Ticket</th><th>Customer</th><th>Subject</th><th>Category</th><th>Priority</th><th>Assigned to</th><th>Created</th><th>Status</th></tr></thead>
+      <tbody>{% for t in tickets.items %}
+        <tr><td><a class="mono primary-cell" href="{{ url_for('tickets.detail', tid=t.id) }}">{{ t.ticket_number }}</a></td><td>{{ t.customer.name }}</td>
+          <td>{{ t.subject }}</td><td>{{ t.category }}</td><td>{{ badge(t.priority) }}</td><td>{{ t.assignee.name if t.assignee else '—' }}</td>
+          <td class="nowrap">{{ t.created_at|d }}</td><td>{{ badge(t.status) }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No tickets here.', 'ticket') }}{% endif %}
+  </div>
+  {{ pager(tickets, 'tickets.index') }}
+</div>
+{% endblock %}

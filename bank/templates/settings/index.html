@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+{{ crumbs([('Settings', None)]) }}
+<div class="page-head"><div><h1>Settings</h1><p>Security policy, alert windows and branch targets.</p></div></div>
+{% set editable = current_user.can('settings', 'edit') %}
+<form method="post" class="stack" data-confirm="Save system settings? Security policy changes apply to all employees." data-confirm-ok="Save settings">
+  {{ csrf() }}
+  <div class="grid g-2">
+    <div class="card"><div class="card-head"><h2>{{ icon('lock') }} Security policy</h2></div><div class="card-body">
+      {% for key, label, kind in fields %}
+        <div class="field"><label for="{{ key }}">{{ label }}</label><input id="{{ key }}" name="{{ key }}" type="{{ kind }}" value="{{ values[key] }}" {{ 'disabled' if not editable }}></div>
+      {% endfor %}
+      <label class="check"><input type="checkbox" name="enforce_mfa" {{ 'checked' if enforce_mfa }} {{ 'disabled' if not editable }}> Require multi-factor authentication for all employees</label>
+    </div></div>
+    <div class="card"><div class="card-head"><h2>{{ icon('shield') }} Built-in protections</h2></div><div class="card-body">
+      <ul class="timeline">
+        <li><span class="dot"></span><div class="t-title">Password policy</div><div class="t-meta">8+ characters with upper, lower, digit and symbol; scrypt hashing</div></li>
+        <li><span class="dot"></span><div class="t-title">Encryption at rest</div><div class="t-meta">PAN, mobile and document numbers encrypted (Fernet / AES)</div></li>
+        <li><span class="dot"></span><div class="t-title">Encryption in transit</div><div class="t-meta">Run behind HTTPS (set BANK_HTTPS=1 for secure cookies + HSTS)</div></li>
+        <li><span class="dot"></span><div class="t-title">Session security</div><div class="t-meta">Inactivity timeout, CSRF tokens, session revocation on password change</div></li>
+        <li><span class="dot"></span><div class="t-title">Least privilege</div><div class="t-meta">Branch-scoped data, per-module permission checks on every protected action</div></li>
+        <li><span class="dot"></span><div class="t-title">Audit</div><div class="t-meta">Logins, views, changes, approvals, exports and denied access are logged</div></li>
+      </ul>
+    </div></div>
+  </div>
+  {% if current_user.can('branch_management', 'view') %}
+  <div class="card"><div class="card-head"><h2>{{ icon('branch') }} Branch targets</h2></div><div class="card-body flush table-wrap">
+    {% set be = editable and current_user.can('branch_management', 'edit') %}
+    <table class="table"><thead><tr><th>Branch</th><th>Deposit target (₹)</th><th>Loan target (₹)</th><th>New accounts / month</th></tr></thead><tbody>
+      {% for b in branches %}<tr><td class="primary-cell">{{ b.name }}<div class="sub-cell">{{ b.code }} · {{ b.city }}</div></td>
+        <td><input type="number" name="b{{ b.id }}_dep" value="{{ b.target_deposits|int }}" {{ 'disabled' if not be }}></td>
+        <td><input type="number" name="b{{ b.id }}_loan" value="{{ b.target_loans|int }}" {{ 'disabled' if not be }}></td>
+        <td><input type="number" name="b{{ b.id }}_acc" value="{{ b.target_accounts }}" {{ 'disabled' if not be }}></td></tr>{% endfor %}
+    </tbody></table>
+  </div></div>
+  {% endif %}
+  {% if editable %}<div class="actions"><button class="btn primary">{{ icon('check', 'sm') }} Save settings</button></div>{% endif %}
+</form>
+{% endblock %}

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, trend with context %}
+{% block title %}Dashboard{% endblock %}
+
+{% block topbar_extra %}
+<form method="get" class="period-select" action="{{ url_for('dashboard.index') }}">
+  {% if selected_branch %}<input type="hidden" name="branch" value="{{ selected_branch }}">{% endif %}
+  <select name="range" data-autosubmit aria-label="Reporting period">
+    {% for k in ['today', 'week', 'month', 'last_month', 'year'] %}
+      <option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ RANGE_LABELS[k] }}{% if rkey == k %} ({{ start|d }} – {{ end|d }}){% endif %}</option>
+    {% endfor %}
+    {% if rkey == 'custom' %}<option value="custom" selected>Custom ({{ start|d }} – {{ end|d }})</option>{% endif %}
+  </select>
+</form>
+{% endblock %}
+
+{% macro donut(id, source, colors, total, rows, label='Total') %}
+  {% set sum = rows|map(attribute=1)|sum %}
+  <div class="donut-wrap">
+    <div class="donut"><canvas data-chart="doughnut" data-colors="{{ colors }}" data-source="{{ source }}" aria-label="{{ id }}"></canvas>
+      <div class="centre"><div><strong>{{ '{:,}'.format(total) }}</strong><span>{{ label }}</span></div></div></div>
+    <ul class="donut-legend">
+      {% for name, n, cls in rows %}
+        <li><span class="sw {{ cls }}"></span>{{ name }}<span class="n">{{ '{:,}'.format(n) }} <span class="p">({{ '%.0f'|format(n / sum * 100 if sum else 0) }}%)</span></span></li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endmacro %}
+
+{% block content %}
+{% set qs = {'branch': selected_branch} if selected_branch else {} %}
+<div class="page-head">
+  <div>
+    <h1>{{ 'Branch Dashboard' if not current_user.sees_all_branches or selected_branch else 'Dashboard' }}</h1>
+    <p>Welcome back, {{ current_user.name }}! Here's what's happening at {{ 'your branch' if not current_user.sees_all_branches else ('the branch' if selected_branch else 'all branches') }} {{ 'today' if rkey == 'today' else RANGE_LABELS.get(rkey, '')|lower if rkey != 'custom' else 'in the selected period' }}.</p>
+  </div>
+  <div class="actions">
+    {% if branches %}
+    <form method="get" class="filters"><input type="hidden" name="range" value="{{ rkey }}">
+      {% if rkey == 'custom' %}<input type="hidden" name="start" value="{{ start.isoformat() }}"><input type="hidden" name="end" value="{{ end.isoformat() }}">{% endif %}
+      <select name="branch" data-autosubmit aria-label="Branch"><option value="">All branches</option>
+        {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if selected_branch == b.id }}>{{ b.name }}</option>{% endfor %}</select></form>
+    {% endif %}
+    <nav class="range-btns" aria-label="Date range">
+      {% for k in ['today', 'week', 'month'] %}<a href="{{ url_for('dashboard.index', range=k, **qs) }}" class="{{ 'on' if rkey == k }}">{{ RANGE_LABELS[k] }}</a>{% endfor %}
+      <a href="{{ url_for('dashboard.index', range='custom', start=start.isoformat(), end=end.isoformat(), **qs) }}" class="{{ 'on' if rkey == 'custom' }}">Custom</a>
+    </nav>
+  </div>
+</div>
+{% if rkey == 'custom' %}
+<form method="get" class="filters mb">
+  <input type="hidden" name="range" value="custom">{% if selected_branch %}<input type="hidden" name="branch" value="{{ selected_branch }}">{% endif %}
+  <label class="check">From <input type="date" name="start" value="{{ start.isoformat() }}"></label>
+  <label class="check">To <input type="date" name="end" value="{{ end.isoformat() }}"></label>
+  <button class="btn primary">Apply</button>
+</form>
+{% endif %}
+
+<div class="kpi-hero-row">
+  {% for label, value, ic, tone, key, href in [
+      ('Total Customers', '{:,}'.format(k.total_customers), 'users', '', 'total_customers', url_for('customers.search') if current_user.can('customer_profile')),
+      ('Total Deposits', k.total_deposits|inr, 'piggy', 'success', 'total_deposits', url_for('deposits.index') if current_user.can('deposits')),
+      ('Total Loans Disbursed', k.loans_disbursed_total|inr, 'file', '', 'loans_disbursed_total', url_for('loans.index') if current_user.can('loans')),
+      ('Pending Approvals', '{:,}'.format(k.pending_approvals), 'approval', 'danger', 'pending_approvals', url_for('approvals.index') if current_user.can('loan_approval') or current_user.can('customer_accounts', 'approve')),
+  ] %}
+  {% set inner %}<span class="ring {{ tone }}">{{ icon(ic) }}</span>
+    <div><div class="label">{{ label }}</div><div class="value">{{ value }}</div>{{ trend(tr[key], cmp) }}</div>{% endset %}
+  {% if href %}<a class="card kpi-hero" href="{{ href }}">{{ inner }}</a>{% else %}<div class="card kpi-hero">{{ inner }}</div>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="grid g-3 mt">
+  <div class="card">
+    <div class="card-head"><h2>Income vs Outgoing</h2>
+      <div class="legend-inline"><span class="key"><span class="sw sq income"></span>Income</span><span class="key"><span class="sw sq outgoing"></span>Outgoing</span></div></div>
+    <div class="card-body"><div class="chart-box sm"><canvas data-chart="flow" data-source="d-flow" aria-label="Income vs outgoing chart"></canvas></div>
+      <div class="legend-inline mt"><span>Income {{ k.income|inr_short }}</span><span>Outgoing {{ k.outgoing|inr_short }}</span>
+        <strong class="{{ 'pos' if k.income >= k.outgoing else 'neg' }}">Net {{ (k.income - k.outgoing)|inr_short }}</strong></div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Account Status</h2></div>
+    <div class="card-body">{{ donut('Account status', 'd-accounts', 'acc-active,acc-inactive,acc-dormant', charts.accounts['values']|sum,
+        [('Active', charts.accounts['values'][0], 'acc-active'), ('Inactive', charts.accounts['values'][1], 'acc-inactive'), ('Dormant', charts.accounts['values'][2], 'acc-dormant')]) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Loan Status</h2></div>
+    <div class="card-body">{{ donut('Loan status', 'd-loans', 'loan-active,loan-closed,loan-overdue,loan-pending', charts.loans['values']|sum,
+        [('Active', charts.loans['values'][0], 'loan-active'), ('Closed', charts.loans['values'][1], 'loan-closed'), ('Overdue', charts.loans['values'][2], 'loan-overdue'), ('Pending', charts.loans['values'][3], 'loan-pending')]) }}</div>
+  </div>
+</div>
+
+<div class="kpi-mini-row mt">
+  {% for label, value, key, href in [
+      ('New Accounts', '{:,}'.format(k.new_accounts), 'new_accounts', url_for('accounts.index') if current_user.can('customer_accounts')),
+      ('Closed Accounts', '{:,}'.format(k.closed_accounts), 'closed_accounts', url_for('accounts.index', status='Closed') if current_user.can('customer_accounts')),
+      ('Loan Disbursed', k.loan_disbursement|inr, 'loan_disbursement', None),
+      ('Loan Collection', k.loan_collection|inr, 'loan_collection', None),
+      ('New Customers', '{:,}'.format(k.new_customers), 'new_customers', url_for('customers.search') if current_user.can('customer_profile')),
+      ('KYC Pending', '{:,}'.format(k.kyc_pending), 'kyc_pending', url_for('kyc.index') if current_user.can('kyc')),
+      ('KYC Expiring', '{:,}'.format(k.kyc_expiring), 'kyc_expiring', url_for('kyc.index', view='expiring') if current_user.can('kyc')),
+      ('Tickets Raised', '{:,}'.format(k.tickets_raised), 'tickets_raised', url_for('tickets.index') if current_user.can('tickets')),
+      ('Overdue Loans', '{:,}'.format(k.overdue_loans), None, url_for('loans.index', status='Overdue') if current_user.can('loans')),
+      ('FD Created / Matured', k.fd_created ~ ' / ' ~ k.fd_matured, 'fd_created', url_for('deposits.index') if current_user.can('deposits')),
+  ] %}
+  {% set inner %}<div class="label">{{ label }}</div><div class="value">{{ value }}</div>
+    {% if key %}{{ trend(tr[key]) }}{% else %}<span class="trend down">{{ k.overdue_amount|inr_short }} outstanding</span>{% endif %}{% endset %}
+  {% if href %}<a class="card kpi-mini" href="{{ href }}">{{ inner }}</a>{% else %}<div class="card kpi-mini">{{ inner }}</div>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="grid dash-row4 mt">
+  <div class="card">
+    <div class="card-head"><h2>Branch Target vs Achievement</h2></div>
+    <div class="card-body">
+      {% for label, actual, target, tone in target_bars %}
+        {% set pct = (actual / target * 100) if target else 0 %}
+        <div class="target-row" title="{{ actual|inr_short if label != 'New Accounts' else actual }} of {{ target|inr_short if label != 'New Accounts' else target }}">
+          <span class="small">{{ label }}</span>
+          <div class="progress {{ tone }}"><span data-width="{{ pct }}"></span></div>
+          <span class="pct">{{ '%.0f'|format(pct) }}%</span>
+        </div>
+      {% endfor %}
+      <p class="small muted mt">Deposits and loans vs annual target; new accounts vs this month's target.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Top High-Value Accounts</h2>{% if current_user.can('customer_accounts') %}<a class="small" href="{{ url_for('accounts.index', sort='balance') }}">View All</a>{% endif %}</div>
+    <div class="card-body">
+      {% if top_accounts %}
+      <div class="mini-box"><table class="mini-table">
+        <thead><tr><th>Customer Name</th><th>Account No.</th><th class="num">Balance</th></tr></thead>
+        <tbody>{% for a in top_accounts %}
+          <tr><td class="ellip" title="{{ a.customer.name }}">{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=a.customer_id) }}">{{ a.customer.name }}</a>{% else %}{{ a.customer.name }}{% endif %}</td>
+            <td class="mono">{{ a.account_number }}</td><td class="num nowrap">{{ a.balance|inr }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}{{ empty('No accounts to show.', 'wallet') }}{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Recent Activities</h2>{% if current_user.can('audit_logs') %}<a class="small" href="{{ url_for('audit.index') }}">View All</a>{% endif %}</div>
+    <div class="card-body">
+      {% if recent %}
+      <div class="mini-box"><table class="mini-table">
+        <thead><tr><th>User</th><th>Action</th><th>Time</th></tr></thead>
+        <tbody>{% for a in recent %}
+          {% set parts = a.employee.name.split() %}
+          <tr><td class="nowrap"><span class="small">{{ parts[0] }}{% if parts|length > 1 %} {{ parts[-1][0] }}.{% endif %}</span></td>
+            <td><a href="{{ url_for('customers.profile', cid=a.customer_id, tab='timeline') }}" class="small">{{ a.action }}</a></td>
+            <td class="small muted nowrap">{{ a.timestamp|ago }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}{{ empty('No recent activity.', 'activity') }}{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>System Alerts</h2>{% if current_user.can('alerts') %}<a class="small" href="{{ url_for('alerts.index') }}">View All</a>{% endif %}</div>
+    <div class="card-body">
+      {% for a in alerts %}
+        {% set tone = 'danger' if a.severity in ('High', 'Critical') else 'warning' if a.severity == 'Medium' else 'success' %}
+        <a class="sys-alert" href="{{ url_for('alerts.open_alert', aid=a.id) }}">
+          <span class="ic ring {{ tone }}">{{ icon('alert' if tone == 'danger' else 'bell' if tone == 'warning' else 'check', 'sm') }}</span>
+          <span class="body"><span class="t">{{ a.title }}</span><br><span class="s">{{ a.message }}</span></span>
+          <span class="when">{{ a.created_at|ago }}</span>
+        </a>
+      {% else %}
+        <div class="sys-alert"><span class="ic ring success">{{ icon('check', 'sm') }}</span><span class="body"><span class="t">All systems operational</span><br><span class="s">No open alerts</span></span></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grid g-21 mt">
+  <div class="card">
+    <div class="card-head"><h2>Deposit & Loan Trends <span class="sub">· last 12 months</span></h2></div>
+    <div class="card-body"><div class="chart-box"><canvas data-chart="trends" data-source="d-trends" aria-label="Deposit and loan trends"></canvas></div></div>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Transaction Volume</h2></div>
+      <div class="card-body"><div class="chart-box sm"><canvas data-chart="volume" data-source="d-volume" aria-label="Transaction volume"></canvas></div></div>
+    </div>
+  </div>
+</div>
+{% if targets|length > 1 %}
+<div class="card mt">
+  <div class="card-head"><h2>Target vs Achievement by Branch</h2></div>
+  <div class="card-body"><div class="chart-box sm"><canvas data-chart="targets" data-source="d-targets" aria-label="Branch targets"></canvas></div></div>
+</div>
+{% endif %}
+
+<script type="application/json" id="d-flow">{{ charts.flow|tojson }}</script>
+<script type="application/json" id="d-volume">{{ charts.volume|tojson }}</script>
+<script type="application/json" id="d-accounts">{{ charts.accounts|tojson }}</script>
+<script type="application/json" id="d-loans">{{ charts.loans|tojson }}</script>
+<script type="application/json" id="d-targets">{{ charts.targets|tojson }}</script>
+<script type="application/json" id="d-trends">{{ charts.trends|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Edit {{ c.name }}{% endblock %}
+{% block content %}
+{{ crumbs([('Customer 360', url_for('customers.search')), (c.name, url_for('customers.profile', cid=c.id)), ('Edit', None)]) }}
+<div class="page-head"><div><h1>Edit customer details</h1><p>Changes are recorded in the activity timeline and audit log.</p></div></div>
+<div class="card"><div class="card-body">
+  <form method="post" class="form-grid" data-confirm="Save changes to {{ c.name }}'s profile?" data-confirm-title="Confirm profile change" data-confirm-ok="Save">
+    {{ csrf() }}
+    <div class="field"><label>Name</label><input value="{{ c.name }}" disabled></div>
+    <div class="field"><label>PAN</label><input value="{{ c.pan }}" disabled></div>
+    <div class="field"><label for="mobile">Mobile</label><input id="mobile" name="mobile" value="{{ c.mobile }}" pattern="[6-9][0-9]{9}"></div>
+    <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ c.email or '' }}"></div>
+    <div class="field full"><label for="address">Address</label><input id="address" name="address" value="{{ c.address or '' }}"></div>
+    <div class="field"><label for="city">City</label><input id="city" name="city" value="{{ c.city or '' }}"></div>
+    <div class="field"><label for="occupation">Occupation</label><input id="occupation" name="occupation" value="{{ c.occupation or '' }}"></div>
+    <div class="field"><label for="risk_category">Risk category</label><select id="risk_category" name="risk_category">
+      {% for r in ['Low', 'Medium', 'High'] %}<option {{ 'selected' if c.risk_category == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="full actions"><button class="btn primary" type="submit">Save changes</button>
+      <a class="btn ghost" href="{{ url_for('customers.profile', cid=c.id) }}">Cancel</a></div>
+  </form>
+</div></div>
+{% endblock %}

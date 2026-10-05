@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf with context %}
+{% block title %}Two-factor authentication{% endblock %}
+{% block content %}
+{{ crumbs([('My profile', url_for('settings.profile')), ('Two-factor authentication', None)]) }}
+<div class="page-head"><div><h1>Two-factor authentication</h1><p>Protect your account with a time-based code from an authenticator app (Google Authenticator, Microsoft Authenticator, Authy).</p></div></div>
+{% if enabled %}
+<div class="card"><div class="card-body">
+  <div class="notice mb">{{ icon('shield', 'sm') }} MFA is active. You will be asked for a code at every sign-in.</div>
+  <form method="post" action="{{ url_for('settings.mfa_disable') }}" data-confirm="Disabling MFA makes your account less secure. Continue?" data-confirm-tone="danger" data-confirm-ok="Disable MFA">
+    {{ csrf() }}
+    <div class="field"><label for="password">Confirm with your password</label><input id="password" name="password" type="password" required></div>
+    <button class="btn danger">Disable MFA</button>
+  </form>
+</div></div>
+{% else %}
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>1 · Scan this QR code</h2></div><div class="card-body center">
+    <img src="{{ qr }}" alt="MFA QR code" width="200" height="200" class="qr">
+    <p class="small muted mt">Can't scan? Enter this key manually:</p><p class="mono">{{ secret }}</p>
+  </div></div>
+  <div class="card"><div class="card-head"><h2>2 · Enter the 6-digit code</h2></div><div class="card-body">
+    <form method="post" action="{{ url_for('settings.mfa_enable') }}">
+      {{ csrf() }}
+      <div class="field"><label for="code">Verification code</label><input id="code" name="code" inputmode="numeric" maxlength="7" required autocomplete="one-time-code"></div>
+      <button class="btn primary block">{{ icon('shield', 'sm') }} Enable MFA</button>
+    </form>
+  </div></div>
+</div>
+{% endif %}
+{% endblock %}

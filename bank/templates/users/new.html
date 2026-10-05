@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf, page_title, perm_grid with context %}
+{% block title %}Add Employee & Permissions{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), ('Add employee', None)]) }}
+<form method="post" data-confirm="Create this employee with the selected role and permissions?" data-confirm-ok="Save">
+  {{ csrf() }}<input type="hidden" name="perms_submitted" value="1">
+  <div class="page-head">
+    {{ page_title('Add Employee & Permissions', url_for('users.index'), 'The employee signs in with their email and must change the temporary password at first sign-in.') }}
+    <div class="actions"><a class="btn" href="{{ url_for('users.index') }}">Cancel</a><button class="btn primary" type="submit">{{ icon('check', 'sm') }} Save</button></div>
+  </div>
+
+  <div class="card mb"><div class="card-body">
+    <div class="form-head">
+      <div class="field"><label for="email">Email ID</label><input id="email" name="email" type="email" placeholder="employee@bank.com" value="{{ f.get('email', '') }}" required></div>
+      <div class="field"><label for="role_id">Role</label>
+        <select id="role_id" name="role_id" data-perm-source="role-perms">
+          {% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if f.get('role_id')|string == r.id|string }}>{{ r.name }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div class="form-head mt">
+      <div class="field"><label for="name">Full name</label><input id="name" name="name" value="{{ f.get('name', '') }}" required></div>
+      <div class="field"><label for="branch_id">Branch</label><select id="branch_id" name="branch_id">
+        {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if (f.get('branch_id')|string == b.id|string) or (not f.get('branch_id') and b.id == current_user.branch_id) }}>{{ b.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="{{ f.get('phone', '') }}"></div>
+      <div class="field"><label for="password">Initial password <span class="muted">(optional)</span></label><input id="password" name="password" type="text" autocomplete="off" placeholder="Auto-generate"></div>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="card-head"><h2>Permissions</h2>
+      <span class="sub" id="perm-note">Pre-filled from the selected role. Changing any box creates a custom role for this employee.</span></div>
+    <div class="card-body">{{ perm_grid(modules, actions, grants) }}</div>
+  </div>
+</form>
+<script type="application/json" id="role-perms">{{ role_map|tojson }}</script>
+{% endblock %}

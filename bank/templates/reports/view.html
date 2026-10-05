@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, empty, crumbs, range_filter with context %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{{ crumbs([('Reports', url_for('reports.index')), (title, None)]) }}
+<div class="page-head">
+  <div><h1>{{ title }}</h1><p>{{ desc }} · {{ start|d }} – {{ end|d }} · {{ total }} row{{ 's' if total != 1 }}</p></div>
+  <div class="actions">
+    {{ range_filter(rkey, start, end, branches, request.args.get('branch')|int or None) }}
+    {% if current_user.can('reports', 'export') %}
+      {% set args = request.args.to_dict() %}
+      <a class="btn" href="{{ url_for('reports.view', key=key, export='xlsx', **args) }}">{{ icon('download', 'sm') }} Excel</a>
+      <a class="btn" href="{{ url_for('reports.view', key=key, export='pdf', **args) }}">{{ icon('download', 'sm') }} PDF</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
+  <div class="card-body flush table-wrap">
+    {% if rows %}
+    <table class="table">
+      <thead><tr>{% for c in cols %}<th class="{{ 'num' if '₹' in c or c in ('Transactions', 'Customers', 'Documents', 'Verified', 'New Accounts', 'Overdue Loans', 'Days Overdue', 'Rate %') }}">{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for r in rows %}<tr>{% for v in r %}
+        <td class="{{ 'num' if v is number }}">{{ ('{:,.2f}'.format(v) if v is float else v) if v is not none }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table>
+    {% if total > rows|length %}<p class="small muted center mt mb">Showing first {{ rows|length }} of {{ total }} rows. Export for the full data set.</p>{% endif %}
+    {% else %}{{ empty('No data for this period.', 'chart') }}{% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, page_title with context %}
+{% block title %}{{ type_label }}{% endblock %}
+{% block content %}
+{{ crumbs([('Loans', url_for('loans.index'))] + ([(type_label, None)] if loan_type else [])) }}
+<div class="page-head">
+  {{ page_title('Loan Management', url_for('dashboard.index') if not loan_type else url_for('loans.index'),
+                'Outstanding ' ~ (stats.outstanding|inr_short) ~ ' · overdue ' ~ (stats.overdue|inr_short) ~ ' · collected this month ' ~ (stats.collected_month|inr_short)) }}
+</div>
+{% include "loans/_list.html" %}
+{% endblock %}
