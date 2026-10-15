@@ -14,12 +14,12 @@ jobs:
         image: postgres:16-alpine
         env: { POSTGRES_USER: bankapp, POSTGRES_PASSWORD: ci-only-owner, POSTGRES_DB: bankdb }
         ports: ["5432:5432"]
-        options: --health-cmd "pg_isready -U bankapp" --health-interval 5s --health-retries 20
+        options: --health-cmd "pg_isready -U bankapp -d bankdb" --health-interval 5s --health-retries 20
     env:
       # Throwaway CI-only values; real secrets never live in the repository.
       BANK_DB_OWNER_URL: postgresql+psycopg://bankapp:ci-only-owner@127.0.0.1:5432/bankdb
-      BANK_APP_DB_PASSWORD: ci-only-app
-      DATABASE_URL: postgresql+psycopg://bank_app:ci-only-app@127.0.0.1:5432/bankdb
+      BANK_APP_DB_PASSWORD: ci_only_app_password_0001   # 16+ chars: the app's start-up check requires it
+      DATABASE_URL: postgresql+psycopg://bank_app:ci_only_app_password_0001@127.0.0.1:5432/bankdb
       BANK_SECRET_KEY: ci-only-secret-key-0123456789abcdef0123456789abcdef
       BANK_DATA_KEY: ZmFrZS1jaS1rZXktMzItYnl0ZXMtbG9uZy0xMjM0NTY=
       BANK_ADMIN_EMAIL: rajnath080703@gmail.com
