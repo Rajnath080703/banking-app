@@ -21,6 +21,7 @@ SUITES = [
     ("Security & branch isolation", "test_security_isolation.py", "bankdb_t_sec"),
     ("Operations: open account, transfers, reversals", "test_operations.py", "bankdb_t_ops"),
     ("Account opening (both entry points)", "test_open_account.py", "bankdb_t_open"),
+    ("Dev sample-data loader", "test_demo_seed.py", "bankdb_t_demo"),
     ("Rate limits", "test_rate_limits.py", "bankdb_t_rl"),
 ]
 if "--perf" in sys.argv:

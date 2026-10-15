@@ -1,5 +1,9 @@
 name: ci
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches-ignore: [dev, main]   # pushes to dev/main run these tests inside deploy.yml first
+  workflow_call:                   # reused by deploy.yml
 permissions: { contents: read }
 
 jobs:

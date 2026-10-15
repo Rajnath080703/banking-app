@@ -1,0 +1,28 @@
+# The only service that listens on the internet: ports 80 and 443 for both environments.
+#   docker network create bank-edge   (once)
+#   docker compose -f deploy/server/proxy.yml --env-file /opt/bank/proxy.env -p bank-proxy up -d
+name: bank-proxy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL}
+      DEV_HOST: ${DEV_HOST:-dev.bank.brunocode.in}
+      MAIN_HOST: ${MAIN_HOST:-main.bank.brunocode.in}
+    volumes:
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    networks: [edge]
+
+networks:
+  edge:
+    external: true
+    name: bank-edge
+
+volumes:
+  caddydata: {}
+  caddyconfig: {}

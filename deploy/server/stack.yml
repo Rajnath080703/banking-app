@@ -1,0 +1,95 @@
+# One environment (dev or main): app + scheduler + PostgreSQL + Redis, joined to the shared proxy.
+# Run from a checkout of the matching branch, with that environment's env file:
+#   docker compose -f deploy/server/stack.yml --env-file /opt/bank/<env>.env -p bank-<env> up -d --build
+# Nothing here publishes a port to the host: only the proxy (proxy.yml) does.
+
+x-app: &app
+  image: bank-${ENV_NAME}:latest            # built once by the migrate service
+  restart: unless-stopped
+  environment: &app-env
+    BANK_ENV: production
+    BANK_HTTPS: "1"
+    BANK_TRUSTED_PROXIES: "1"                # exactly one proxy (Caddy) in front
+    BANK_INPROCESS_SCAN: "0"                 # the scheduler service runs the scan
+    DATABASE_URL: postgresql+psycopg://bank_app:${BANK_APP_DB_PASSWORD}@db:5432/bankdb
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    BANK_SECRET_KEY: ${BANK_SECRET_KEY}
+    BANK_DATA_KEY: ${BANK_DATA_KEY}
+    BANK_ADMIN_EMAIL: ${BANK_ADMIN_EMAIL}
+  volumes: [uploads:/data/uploads]
+  depends_on:
+    migrate: { condition: service_completed_successfully }
+    redis: { condition: service_healthy }
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bankowner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD}
+      POSTGRES_DB: bankdb
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bankowner -d bankdb"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment: { REDIS_PASSWORD: "${REDIS_PASSWORD}" }
+    volumes: [redisdata:/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      retries: 30
+
+  migrate:                                   # one-shot on every deploy: DB role, migrations, reference data
+    image: bank-${ENV_NAME}:latest
+    build: { context: ../.., dockerfile: Dockerfile }
+    command: ["flask", "--app", "wsgi:app", "prepare-db"]
+    environment:
+      BANK_ENV: development                  # owner connection only; exits when done
+      BANK_DB_OWNER_URL: postgresql+psycopg://bankowner:${DB_OWNER_PASSWORD}@db:5432/bankdb
+      DATABASE_URL: postgresql+psycopg://bankowner:${DB_OWNER_PASSWORD}@db:5432/bankdb
+      BANK_APP_DB_PASSWORD: ${BANK_APP_DB_PASSWORD}
+      BANK_SECRET_KEY: ${BANK_SECRET_KEY}
+      BANK_DATA_KEY: ${BANK_DATA_KEY}
+      BANK_ADMIN_EMAIL: ${BANK_ADMIN_EMAIL}
+      BANK_ADMIN_PASSWORD: ${BANK_ADMIN_PASSWORD}
+    networks: [backend]
+    depends_on: { db: { condition: service_healthy } }
+    restart: "no"
+
+  app:
+    <<: *app
+    networks:
+      backend: {}
+      edge:
+        aliases: ["bank-${ENV_NAME}-app"]    # the proxy reaches this environment by this name
+
+  scheduler:                                 # overdue loans, KYC expiry, FD maturity, audit sealing
+    <<: *app
+    environment:
+      <<: *app-env
+      BANK_DEMO_DATA_ALLOWED: ${BANK_DEMO_DATA_ALLOWED:-0}
+      BANK_DEMO_STAFF_PASSWORD: ${BANK_DEMO_STAFF_PASSWORD:-}
+    command: ["sh", "-c", "while true; do flask --app wsgi:app scan; sleep 300; done"]
+    networks: [backend]
+    healthcheck: { disable: true }
+
+networks:
+  backend: {}
+  edge:
+    external: true
+    name: bank-edge
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  uploads: {}

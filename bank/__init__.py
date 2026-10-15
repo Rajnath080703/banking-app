@@ -289,5 +289,7 @@ def create_app(test_config=None):
 
     from .seed import register_cli
     register_cli(app)
+    from . import demo
+    demo.register(app)  # `flask seed-demo`: refuses unless BANK_DEMO_DATA_ALLOWED=1
     # Schema is managed by Alembic migrations (bootstrap.prepare_database / flask db upgrade).
     return app

@@ -1,0 +1,32 @@
+# HTTPS for both environments. Caddy obtains and renews Let's Encrypt certificates
+# automatically once DNS points at this server and ports 80/443 are open.
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+(bank) {
+	encode gzip
+	request_body {
+		max_size 11MB
+	}
+	header {
+		-Server
+	}
+}
+
+{$DEV_HOST} {
+	import bank
+	reverse_proxy bank-dev-app:8000 {
+		health_uri /healthz
+		health_interval 15s
+	}
+}
+
+{$MAIN_HOST} {
+	import bank
+	reverse_proxy bank-main-app:8000 {
+		health_uri /healthz
+		health_interval 15s
+	}
+}

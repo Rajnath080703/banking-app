@@ -1,0 +1,42 @@
+# Push to `dev`  → tests → deploy to https://dev.bank.brunocode.in
+# Push to `main` → tests → deploy to https://main.bank.brunocode.in
+# Nothing is deployed if any test fails. Needs these repository secrets (Settings → Secrets → Actions):
+#   DEPLOY_HOST         server IP or hostname
+#   DEPLOY_USER         SSH user allowed to run docker (e.g. root or a docker-group user)
+#   DEPLOY_SSH_KEY      private key of a key pair whose public key is in that user's authorized_keys
+#   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan <server>` (pins the server's host key)
+name: deploy
+on:
+  push:
+    branches: [dev, main]
+permissions: { contents: read }
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false        # never interrupt a deploy half-way
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'main' || 'dev' }}   # main can require a manual approval in GitHub
+    steps:
+      - name: Deploy over SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          ENV_NAME: ${{ github.ref_name }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -z "$HOST" ]; then
+            echo "::notice::Deployment secrets are not set yet (DEPLOY_HOST etc.); tests passed, nothing deployed."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes "$TARGET" \
+            "sh /opt/bank/$ENV_NAME/deploy/server/deploy.sh $ENV_NAME"
