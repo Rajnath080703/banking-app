@@ -1,23 +1,31 @@
 import re
 import secrets
-import string
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from ..extensions import db
+from ..mailer import send_mail
 from ..models import ACTIONS, MODULES, Branch, Employee, LoginHistory, Permission, Role
-from ..security import audit, password_problems, require_perm
+from ..security import audit, once_per_form, require_perm
+from ..services import apply_role_grants, create_approval, pending_request
+from .auth import issue_invite
 
 bp = Blueprint("users", __name__, url_prefix="/users")
 
 
-def _temp_password():
-    alphabet = string.ascii_letters + string.digits
-    while True:
-        pw = "".join(secrets.choice(alphabet) for _ in range(10)) + secrets.choice("@#$%&!")
-        if not password_problems(pw):
-            return pw
+def _deliver_link(emp, raw, purpose):
+    """Email the one-time link when SMTP is configured; otherwise show it once on screen.
+    The link is rendered directly (never put in a flash message, which lives in the cookie)."""
+    link = url_for("auth.accept_invite", token=raw, _external=True)
+    subject = "Your Local Bank Ops account" if purpose == "invite" else "Reset your Local Bank Ops password"
+    sent = send_mail(emp.email, subject,
+                     f"Hello {emp.name},\n\nUse this one-time link within 48 hours to set your password:\n{link}\n\n"
+                     f"If you did not expect this message, tell your administrator.")
+    audit("Invite link issued" if purpose == "invite" else "Password reset link issued", "user_management",
+          emp.email, "emailed" if sent else "shown to administrator")
+    db.session.commit()
+    return render_template("users/invite_link.html", emp=emp, link=None if sent else link, purpose=purpose)
 
 
 def _assignable_roles():
@@ -82,6 +90,7 @@ def index():
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 @require_perm("user_management", "create")
+@once_per_form
 def new():
     roles = _assignable_roles()
     branches = Branch.query.all() if current_user.sees_all_branches else [current_user.branch]
@@ -102,11 +111,6 @@ def new():
             errors.append("You are not allowed to assign that role.")
         if branch_id not in [b.id for b in branches]:
             errors.append("Invalid branch.")
-        password = f.get("password", "").strip()
-        if password:
-            problems = password_problems(password)
-            if problems:
-                errors.append("Password needs " + ", ".join(problems) + ".")
         if errors:
             for e in errors:
                 flash(e, "danger")
@@ -132,21 +136,18 @@ def new():
             db.session.flush()
             audit("Role created", "user_management", role_name, f"custom permissions for {email}")
             role = custom
-        temp = password or _temp_password()
         count = Employee.query.count() + 1
-        emp = Employee(employee_code=f"EMP{count:04d}", name=name, email=email, phone=f.get("phone"),
-                       role=role, branch_id=branch_id, must_change_password=True,
-                       session_token=secrets.token_hex(16))
+        emp = Employee(employee_code=f"EMP{count:04d}", name=name[:120], email=email, phone=(f.get("phone") or "")[:20],
+                       role=role, branch_id=branch_id, session_token=secrets.token_hex(16))
         while Employee.query.filter_by(employee_code=emp.employee_code).first():
             count += 1
             emp.employee_code = f"EMP{count:04d}"
-        emp.set_password(temp)
+        emp.set_password(secrets.token_urlsafe(48))  # unusable until the employee sets their own
         db.session.add(emp)
+        db.session.flush()
         audit("Employee created", "user_management", email, f"role={role.name}")
-        db.session.commit()
-        flash(f"Employee {email} created. Temporary password: {temp} — share it securely; "
-              f"they must change it at first sign-in.", "success")
-        return redirect(url_for("users.index"))
+        raw = issue_invite(emp, "invite", current_user.id)
+        return _deliver_link(emp, raw, "invite")
     default_role = next((r for r in roles if r.name == "Clerk"), roles[-1] if roles else None)
     return render_template("users/new.html", roles=roles, branches=branches, f={"role_id": default_role.id if default_role else None},
                            modules=MODULES, actions=ACTIONS, grants=role_grants(default_role) if default_role else {},
@@ -156,6 +157,7 @@ def new():
 @bp.route("/<int:eid>/edit", methods=["GET", "POST"])
 @login_required
 @require_perm("user_management", "edit")
+@once_per_form
 def edit(eid):
     emp = db.session.get(Employee, eid) or abort(404)
     if not _can_manage(emp) or (not current_user.sees_all_branches and emp.branch_id != current_user.branch_id):
@@ -183,17 +185,16 @@ def edit(eid):
                 emp.is_active_flag = active
                 if not active:
                     emp.session_token = secrets.token_hex(16)
-            emp.name = f.get("name", emp.name).strip() or emp.name
-            emp.phone = f.get("phone", "").strip()
+            emp.name = (f.get("name", emp.name).strip() or emp.name)[:120]
+            emp.phone = f.get("phone", "").strip()[:20]
             audit("Employee updated", "user_management", emp.email, "; ".join(changes) or "details")
             flash("Employee updated.", "success")
         elif action == "reset":
-            temp = _temp_password()
-            emp.set_password(temp)
-            emp.must_change_password = True
-            emp.session_token = secrets.token_hex(16)
+            emp.set_password(secrets.token_urlsafe(48))  # old password stops working immediately
+            emp.session_token = secrets.token_hex(16)    # and every open session ends
             audit("Password reset", "user_management", emp.email)
-            flash(f"Temporary password for {emp.email}: {temp}", "success")
+            raw = issue_invite(emp, "reset", current_user.id)
+            return _deliver_link(emp, raw, "reset")
         elif action == "unlock":
             emp.failed_attempts = 0
             emp.locked_until = None
@@ -254,25 +255,38 @@ def role_edit(rid):
     if request.method == "POST":
         if not editable:
             abort(403)
-        changes = []
+        current = role_grants(role)
+        wanted = {}
         for module, _ in MODULES:
-            p = role.perm(module)
-            if not p:
-                p = Permission(module=module)
-                role.permissions.append(p)
+            acts = []
             for a in ACTIONS:
-                new_val = bool(request.form.get(f"{module}:{a}"))
-                # Never grant a right the editor does not hold themselves.
-                if new_val and not current_user.can(module, a):
-                    new_val = False
-                if new_val != p.allows(a):
-                    changes.append(f"{module}.{a}={'Y' if new_val else 'N'}")
-                    setattr(p, f"can_{a}", new_val)
-        if not role.is_system:
-            role.description = request.form.get("description", role.description)
-        audit("Permissions updated", "user_management", role.name, ", ".join(changes)[:480] or "no change")
+                on = bool(request.form.get(f"{module}:{a}"))
+                # Never grant a right the editor does not hold; rights the editor lacks stay as they are.
+                if not current_user.can(module, a):
+                    on = a in current.get(module, [])
+                if on:
+                    acts.append(a)
+            if acts:
+                wanted[module] = acts
+        changes = [f"{m}.{a}={'Y' if a in wanted.get(m, []) else 'N'}" for m, _ in MODULES for a in ACTIONS
+                   if (a in wanted.get(m, [])) != (a in current.get(m, []))]
+        if not role.is_system and current_user.is_super_admin:
+            role.description = (request.form.get("description") or role.description or "")[:255]
+        if not changes:
+            flash("No permission changes to save.", "info")
+        elif current_user.is_super_admin:
+            apply_role_grants(role, wanted)
+            audit("Permissions updated", "user_management", role.name, ", ".join(changes)[:480])
+            flash(f"Permissions for {role.name} saved ({len(changes)} change{'s' if len(changes) != 1 else ''}).", "success")
+        elif pending_request("role_permissions", role.id):
+            flash("A permission change for this role is already waiting for approval.", "warning")
+        else:
+            req = create_approval("role_permissions", "role", role.id, None, None,
+                                  f"Permission change for role {role.name}: {len(changes)} change(s)",
+                                  {"grants": wanted, "changes": changes})
+            flash(f"Permission change sent for approval ({req.request_number}). It takes effect once a "
+                  f"second administrator approves it.", "success")
         db.session.commit()
-        flash(f"Permissions for {role.name} saved ({len(changes)} change{'s' if len(changes) != 1 else ''}).", "success")
         return redirect(url_for("users.role_edit", rid=role.id))
     return render_template("users/role_edit.html", role=role, modules=MODULES, actions=ACTIONS, editable=editable,
                            grants=role_grants(role))

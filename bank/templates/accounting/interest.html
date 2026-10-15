@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf, page_title with context %}
+{% block title %}Savings interest{% endblock %}
+{% block content %}
+{{ crumbs([('Accounting', url_for('accounting.index') if current_user.can('accounting') else None), ('Savings interest', None)]) }}
+<div class="page-head">{{ page_title('Savings interest', url_for('accounting.index') if current_user.can('accounting') else url_for('dashboard.index'),
+  'Interest = Σ daily closing balance × account rate ÷ 365, calculated from the transaction history. Posting needs checker and manager approval.') }}</div>
+
+<div class="card mb"><form method="get" class="toolbar">
+  <div class="field"><label for="start">Period start</label><input type="date" id="start" name="start" value="{{ start.isoformat() }}"></div>
+  <div class="field"><label for="end">Period end</label><input type="date" id="end" name="end" value="{{ end.isoformat() }}"></div>
+  <button class="btn">{{ icon('refresh', 'sm') }} Recalculate preview</button>
+</form></div>
+
+{% if problem %}<div class="notice warning mb">{{ icon('alert', 'sm') }}<span>{{ problem }}</span></div>{% endif %}
+{% if already %}<div class="notice mb">{{ icon('check', 'sm') }}<span>Interest for this period was already posted ({{ already|length }} branch run{{ 's' if already|length != 1 }}). It cannot be posted twice.</span></div>{% endif %}
+
+<div class="card mb">
+  <div class="card-head"><h2>Preview · {{ start|d }} – {{ end|d }}</h2>
+    <div class="actions"><span class="badge info">{{ count }} account{{ 's' if count != 1 }} · {{ total|inr(2) }}</span>
+      {% if current_user.can('interest', 'create') and rows and not problem and not already %}
+      <form method="post" data-confirm="Submit {{ total|inr(2) }} of savings interest on {{ count }} accounts for approval?" data-confirm-ok="Submit for approval">
+        {{ csrf() }}<input type="hidden" name="start" value="{{ start.isoformat() }}"><input type="hidden" name="end" value="{{ end.isoformat() }}">
+        <button class="btn primary" data-busy="Submitting…">{{ icon('approval', 'sm') }} Submit for approval</button></form>
+      {% endif %}</div></div>
+  <div class="card-body flush table-wrap">
+    {% if rows %}
+    <table class="table"><thead><tr><th>Account</th><th class="num">Rate</th><th class="num">Average daily balance</th><th class="num">Interest</th></tr></thead>
+      <tbody>{% for r in rows %}<tr><td class="mono">{{ r.account_number }}</td><td class="num">{{ r.rate }}%</td>
+        <td class="num">{{ r.avg_balance|inr(2) }}</td><td class="num"><strong>{{ r.interest|inr(2) }}</strong></td></tr>{% endfor %}</tbody></table>
+    {% if count > rows|length %}<p class="small muted center mt mb">Showing the first {{ rows|length }} of {{ count }} accounts.</p>{% endif %}
+    {% else %}{{ empty('No savings interest due for this period.', 'trend-up') }}{% endif %}
+  </div>
+</div>
+
+<div class="card"><div class="card-head"><h2>Posting history</h2></div>
+  <div class="card-body flush table-wrap">
+    {% if runs %}<table class="table"><thead><tr><th>Period</th><th>Reference</th><th class="num">Accounts</th><th class="num">Total</th><th>Posted</th></tr></thead>
+      <tbody>{% for r in runs %}<tr><td>{{ r.period_start|d }} – {{ r.period_end|d }}</td><td class="mono">{{ r.reference }}</td>
+        <td class="num">{{ r.accounts }}</td><td class="num">{{ r.total|inr(2) }}</td><td>{{ r.posted_at|dt }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}{{ empty('No interest has been posted yet.', 'clock') }}{% endif %}
+  </div></div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, csrf, page_title with context %}
+{% block title %}Close FD early{% endblock %}
+{% block content %}
+{{ crumbs([('Deposits & FD', url_for('deposits.index')), (fd.fd_number, None)]) }}
+<div class="page-head">{{ page_title('Close FD ' ~ fd.fd_number ~ ' early', url_for('customers.profile', cid=fd.customer_id, tab='deposits')) }}</div>
+<div class="grid g-2">
+  <div class="card"><div class="card-head"><h2>Quote for today</h2></div><div class="card-body">
+    <dl class="kv">
+      <dt>Customer</dt><dd>{{ fd.customer.name }} · <span class="mono">{{ fd.customer.customer_code }}</span></dd>
+      <dt>Principal</dt><dd>{{ fd.principal|inr(2) }}</dd>
+      <dt>Booked</dt><dd>{{ fd.start_date|d }} for {{ fd.tenure_months }} months at {{ fd.interest_rate }}%</dd>
+      <dt>Value at maturity</dt><dd>{{ fd.maturity_amount|inr(2) }} on {{ fd.maturity_date|d }}</dd>
+      <dt>Rate applied now</dt><dd>{{ quote.rate }}% (contracted rate less the premature-closure penalty)</dd>
+      <dt>Interest earned</dt><dd>{{ quote.interest|inr(2) }}</dd>
+      <dt>Payout today</dt><dd><strong>{{ quote.value|inr(2) }}</strong> to {{ fd.account.account_number if fd.account else '—' }}</dd>
+    </dl>
+  </div></div>
+  <div class="card"><div class="card-head"><h2>Request closure</h2></div><div class="card-body">
+    {% if pending %}
+      <div class="notice warning">{{ icon('clock', 'sm') }}<span>Request <a href="{{ url_for('approvals.detail', rid=pending.id) }}">{{ pending.request_number }}</a> is already waiting for approval.</span></div>
+    {% else %}
+    <form method="post" data-confirm="Send early closure of {{ fd.fd_number }} for approval? The payout is recalculated on the approval date." data-confirm-ok="Send for approval">
+      {{ csrf() }}
+      <div class="field"><label for="reason">Customer's reason</label><textarea id="reason" name="reason" maxlength="200" required></textarea></div>
+      <button class="btn primary" data-busy="Sending…">{{ icon('approval', 'sm') }} Send for approval</button>
+    </form>
+    {% endif %}
+  </div></div>
+</div>
+{% endblock %}

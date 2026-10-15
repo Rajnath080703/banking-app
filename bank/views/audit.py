@@ -18,7 +18,7 @@ CATEGORIES = {
                   "Approval rejected"],
     "kyc": ["Document uploaded", "Document verified", "Document rejected"],
     "admin": ["Employee created", "Employee updated", "Role created", "Permissions updated",
-              "Settings updated", "Alert rules updated", "Password reset", "Sessions revoked",
+              "Settings updated", "Branch created", "Alert rules updated", "Password reset", "Sessions revoked",
               "MFA enabled", "MFA disabled", "Password changed"],
     "exports": ["Report exported"],
 }

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, empty, crumbs, pager with context %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, txn_badges, reverse_btn with context %}
 {% block title %}Transactions{% endblock %}
 {% block content %}
 {{ crumbs([('Transactions', None)]) }}
 <div class="page-head">
   <div><h1>Transactions</h1><p>{{ start|d }}{% if start != end %} – {{ end|d }}{% endif %}</p></div>
-  {% if current_user.can('transactions', 'create') %}<div class="actions"><a class="btn primary" href="{{ url_for('transactions.new') }}">{{ icon('plus', 'sm') }} Post transaction</a></div>{% endif %}
+  {% if current_user.can('transactions', 'create') %}<div class="actions"><a class="btn" href="{{ url_for('transactions.transfer') }}">{{ icon('swap', 'sm') }} Transfer</a><a class="btn primary" href="{{ url_for('transactions.new') }}">{{ icon('plus', 'sm') }} Post transaction</a></div>{% endif %}
 </div>
 <div class="kpis mb">
   {% set cr = totals.get('Credit', (0, 0)) %}{% set dr = totals.get('Debit', (0, 0)) %}
@@ -33,7 +33,7 @@
         <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
           <td>{{ t.customer.name }}</td><td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
           <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
-          <td class="num muted">{{ t.balance_after|inr(2) }}</td><td>{% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}</td></tr>
+          <td class="num muted">{{ t.balance_after|inr(2) }}</td><td class="right nowrap">{{ txn_badges(t) }} {{ reverse_btn(t) }}</td></tr>
       {% endfor %}</tbody>
     </table>
     {% else %}{{ empty('No transactions in this period.', 'swap') }}{% endif %}

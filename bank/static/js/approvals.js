@@ -3,6 +3,6 @@
   var box = document.getElementById("remarks");
   if (!box) return;
   document.querySelectorAll("[data-copy-remarks]").forEach(function (hidden) {
-    hidden.form.addEventListener("submit", function () { hidden.value = box.value; }, true);
+    hidden.form.addEventListener("submit", function () { if (!hidden.value) hidden.value = box.value; }, true);  // a reason typed in the dialog wins
   });
 })();

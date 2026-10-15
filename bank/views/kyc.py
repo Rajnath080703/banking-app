@@ -1,31 +1,37 @@
-import os
-import uuid
-from datetime import date, datetime, timedelta
+import io
+from datetime import datetime, timedelta
 
-from flask import (Blueprint, abort, current_app, flash, redirect, render_template, request,
-                   send_from_directory, url_for)
+from flask import (Blueprint, abort, flash, redirect, render_template, request,
+                   send_file, url_for)
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
+from .. import storage, workqueue
 from ..extensions import db
 from ..models import DOC_TYPES, Customer, Document, DocumentVerification, Loan, Setting
-from ..security import customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
-from ..utils import parse_date
+from ..security import once_per_form, customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
+from ..utils import parse_date, local_today
 
 bp = Blueprint("kyc", __name__, url_prefix="/kyc")
 
-ALLOWED_EXT = {".pdf", ".png", ".jpg", ".jpeg"}
-MAGIC = {".pdf": [b"%PDF"], ".png": [b"\x89PNG"], ".jpg": [b"\xff\xd8\xff"], ".jpeg": [b"\xff\xd8\xff"]}
 
 
 def _refresh_customer_kyc(customer):
-    kyc_docs = customer.documents.filter_by(category="KYC").all()
-    if any(d.status == "Expired" for d in kyc_docs):
+    """KYC status from the *current* document of each type (superseded copies are ignored),
+    so verifying a renewed passport clears an earlier expiry."""
+    current = {}
+    for d in customer.documents.filter(Document.category == "KYC", Document.status != "Superseded") \
+            .order_by(Document.uploaded_at).all():
+        prev = current.get(d.doc_type)
+        # a verified renewal wins over an expired or rejected older copy
+        if prev is None or d.status in ("Verified", "Pending") or prev.status not in ("Verified",):
+            current[d.doc_type] = d
+    docs = list(current.values())
+    if any(d.status == "Expired" for d in docs):
         customer.kyc_status = "Expired"
-    elif kyc_docs and all(d.status == "Verified" for d in kyc_docs) and \
-            {"PAN Card", "Aadhaar"} <= {d.doc_type for d in kyc_docs}:
+    elif docs and all(d.status == "Verified" for d in docs) and {"PAN Card", "Aadhaar"} <= set(current):
         customer.kyc_status = "Verified"
-    elif any(d.status == "Rejected" for d in kyc_docs):
+    elif any(d.status == "Rejected" for d in docs):
         customer.kyc_status = "Rejected"
     else:
         customer.kyc_status = "Pending"
@@ -36,7 +42,7 @@ def _refresh_customer_kyc(customer):
 @require_perm("kyc", "view")
 def index():
     view = request.args.get("view", "pending")
-    today = date.today()
+    today = local_today()
     warn = Setting.get_int("kyc_expiry_warning_days")
     q = Document.query.join(Customer)
     q = branch_scope(q, Customer)
@@ -74,6 +80,7 @@ def index():
 @bp.route("/upload", methods=["GET", "POST"])
 @login_required
 @require_perm("kyc", "create")
+@once_per_form
 def upload():
     customer = customer_from_request()
     if request.method == "POST" and customer:
@@ -83,17 +90,15 @@ def upload():
         if doc_type not in DOC_TYPES:
             flash("Select a document type.", "danger")
             return redirect(request.url)
-        stored, original = None, None
-        if file and file.filename:
-            original = secure_filename(file.filename)
-            ext = os.path.splitext(original)[1].lower()
-            head = file.stream.read(8)
-            file.stream.seek(0)
-            if ext not in ALLOWED_EXT or not any(head.startswith(m) for m in MAGIC[ext]):
-                flash("Only PDF, PNG or JPG files are accepted.", "danger")
-                return redirect(request.url)
-            stored = f"{uuid.uuid4().hex}{ext}"
-            file.save(os.path.join(current_app.config["UPLOAD_FOLDER"], stored))
+        if not file or not file.filename:
+            flash("Attach the scanned document (PDF, PNG or JPG). A document cannot be verified without it.", "danger")
+            return redirect(request.url)
+        original = secure_filename(file.filename)[:200] or "document"
+        try:
+            stored = storage.save(original, file.stream.read(storage.MAX_BYTES + 1))  # encrypted at rest
+        except storage.StorageError as exc:
+            flash(str(exc), "danger")
+            return redirect(request.url)
         loan_id = f.get("loan_id", type=int)
         if loan_id:
             loan = db.session.get(Loan, loan_id)
@@ -137,14 +142,23 @@ def download(did):
     ensure_branch_access(doc.customer)
     if not doc.stored_name:
         abort(404)
+    try:
+        data = storage.load(doc.stored_name)
+    except storage.StorageError as exc:
+        audit("Document file unavailable", "kyc", f"DOC-{doc.id}", str(exc), result="failed")
+        db.session.commit()
+        abort(404)
     audit("Document file downloaded", "kyc", f"DOC-{doc.id}", doc.doc_type)
     db.session.commit()
-    return send_from_directory(current_app.config["UPLOAD_FOLDER"], doc.stored_name,
-                               download_name=doc.file_name, as_attachment=True)
+    resp = send_file(io.BytesIO(data), mimetype=storage.mimetype_for(doc.file_name),
+                     as_attachment=True, download_name=doc.file_name or "document")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @bp.route("/doc/<int:did>/verify", methods=["POST"])
 @login_required
+@once_per_form
 def verify(did):
     doc = db.session.get(Document, did) or abort(404)
     ensure_branch_access(doc.customer)
@@ -154,8 +168,20 @@ def verify(did):
     if doc.uploaded_by == current_user.id:
         flash("Maker-checker: you cannot verify a document you uploaded.", "danger")
         return redirect(url_for("kyc.document", did=did))
-    remarks = request.form.get("remarks", "").strip()
+    if doc.status != "Pending":
+        flash(f"This document is already {doc.status.lower()}. Nothing was changed.", "warning")
+        return redirect(url_for("kyc.document", did=did))
+    remarks = request.form.get("remarks", "").strip()[:250]
+    if decision == "reject" and not remarks:
+        flash("Enter the reason for rejecting, so the customer can be told what to bring.", "danger")
+        return redirect(url_for("kyc.document", did=did))
     doc.status = "Verified" if decision == "approve" else "Rejected"
+    if doc.status == "Verified":
+        # Older copies of the same document are replaced by this verified one (renewal).
+        Document.query.filter(Document.customer_id == doc.customer_id, Document.doc_type == doc.doc_type,
+                              Document.id != doc.id, Document.category == doc.category,
+                              Document.status.in_(["Verified", "Expired", "Rejected"])).update(
+            {"status": "Superseded"}, synchronize_session=False)
     doc.verified_by = current_user.id
     doc.verified_at = datetime.utcnow()
     doc.remarks = remarks or doc.remarks
@@ -168,5 +194,10 @@ def verify(did):
         activity(doc.customer_id, "KYC updated", doc.customer.customer_code, f"KYC status: {doc.customer.kyc_status}")
     audit(f"Document {doc.status.lower()}", "kyc", f"DOC-{doc.id}", remarks)
     db.session.commit()
-    flash(f"Document marked {doc.status}.", "success")
-    return redirect(request.form.get("next") or url_for("kyc.index"))
+    flash(f"{doc.doc_type} for {doc.customer.name} marked {doc.status}. Customer KYC: {doc.customer.kyc_status}.", "success")
+    nxt = workqueue.next_kyc(after_id=doc.id)  # never a redirect target taken from the request
+    if nxt:
+        flash(f"Next document to verify: {nxt.doc_type} for {nxt.customer.name}.", "info")
+        return redirect(url_for("kyc.document", did=nxt.id))
+    flash("No more documents waiting for your verification.", "info")
+    return redirect(url_for("kyc.index"))

@@ -10,7 +10,7 @@
 <div class="card mb"><div class="card-head"><h2>Customers <span class="sub">· {{ results.customers|length }}</span></h2></div>
   <div class="card-body flush table-wrap">
   {% if results.customers %}<table class="table"><thead><tr><th>Name</th><th>Customer ID</th><th>Mobile</th><th>Branch</th><th>KYC</th><th></th></tr></thead><tbody>
-    {% for c in results.customers %}<tr><td class="primary-cell">{{ c.name }}</td><td class="mono">{{ c.customer_code }}</td><td class="mono">{{ c.mobile_masked }}</td>
+    {% for c in results.customers %}<tr><td class="primary-cell"><a href="{{ url_for('customers.profile', cid=c.id) }}">{{ c.name }}</a></td><td class="mono">{{ c.customer_code }}</td><td class="mono">{{ c.mobile_masked }}</td>
       <td>{{ c.branch.name }}</td><td>{{ badge(c.kyc_status) }}</td><td class="right"><a class="btn sm" href="{{ url_for('customers.profile', cid=c.id) }}">Open 360</a></td></tr>{% endfor %}
   </tbody></table>{% else %}{{ empty('No matching customers.', 'customer') }}{% endif %}
 </div></div>

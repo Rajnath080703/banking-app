@@ -3,11 +3,15 @@
 {% block title %}Accounts{% endblock %}
 {% block content %}
 {{ crumbs([('Accounts', None)]) }}
-<div class="page-head"><div><h1>Savings & Current Accounts</h1><p>Active, inactive (6+ months idle), dormant (12+ months idle) and closed accounts.</p></div></div>
+<div class="page-head"><div><h1>Savings & Current Accounts</h1><p>Active, inactive (6+ months idle), dormant (12+ months idle), frozen and closed accounts.</p></div>
+  {% if current_user.can('customer_accounts', 'create') %}
+  <div class="actions"><a class="btn primary" href="{{ url_for('accounts.new') }}">{{ icon('plus', 'sm') }} Open Account</a></div>
+  {% endif %}
+</div>
 <div class="card">
   <div class="card-head">
     <div class="seg">
-      {% for s in ['', 'Active', 'Inactive', 'Dormant', 'Pending', 'Closed'] %}
+      {% for s in ['', 'Active', 'Inactive', 'Dormant', 'Frozen', 'Pending', 'Closed', 'Rejected'] %}
         <a href="{{ url_for('accounts.index', status=s, type=acc_type, q=term) }}" class="{{ 'on' if status == s }}">{{ s or 'All' }}</a>{% endfor %}
     </div>
     <form method="get" class="filters">

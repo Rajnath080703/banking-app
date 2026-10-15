@@ -8,7 +8,8 @@
 <div class="card">
   <div class="card-head">
     <div class="seg">
-      {% for key, label in [('open', 'Open'), ('mine', 'Raised by me'), ('Approved', 'Approved'), ('Rejected', 'Rejected'), ('all', 'All')] %}
+      {% if can_act %}<a href="{{ url_for('approvals.index', status='awaiting', type=rtype) }}" class="{{ 'on' if status == 'awaiting' }}">Awaiting me{% if awaiting_count %} ({{ awaiting_count }}){% endif %}</a>{% endif %}
+      {% for key, label in [('open', 'All open'), ('mine', 'Raised by me'), ('Approved', 'Approved'), ('Rejected', 'Rejected'), ('all', 'All')] %}
         <a href="{{ url_for('approvals.index', status=key, type=rtype) }}" class="{{ 'on' if status == key }}">{{ label }}</a>{% endfor %}
     </div>
     <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
@@ -26,7 +27,7 @@
           <td class="right"><a class="btn sm {{ 'primary' if actionable[r.id] }}" href="{{ url_for('approvals.detail', rid=r.id) }}">{{ 'Action' if actionable[r.id] else 'View' }}</a></td></tr>
       {% endfor %}</tbody>
     </table>
-    {% else %}{{ empty('No approval requests here.', 'approval') }}{% endif %}
+    {% else %}{{ empty('Nothing is waiting for you. Requests you can review or approve appear here.' if status == 'awaiting' else 'No approval requests here.', 'approval') }}{% endif %}
   </div>
   {{ pager(reqs, 'approvals.index') }}
 </div>

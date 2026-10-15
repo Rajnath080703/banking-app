@@ -11,11 +11,12 @@ from ..extensions import db
 from ..models import (Account, Activity, ApprovalRequest, Branch, Customer, Document,
                       FixedDeposit, Loan, LoanRepayment, Setting, Ticket, Transaction)
 from ..security import (activity, audit, branch_scope, can_view_sensitive, ensure_branch_access,
-                        require_perm)
+                        once_per_form, require_perm)
 from ..services import money_sum, search_customers
-from ..utils import parse_date, unique_number
+from ..utils import local_today, parse_date, to_local, unique_number, inr
 
 bp = Blueprint("customers", __name__, url_prefix="/customers")
+EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}")
 
 TABS = [
     ("overview", "Overview", "customer_profile"),
@@ -28,6 +29,7 @@ TABS = [
     ("repayments", "Repayments", "loans"),
     ("approvals", "Approvals", "customer_profile"),
     ("tickets", "Tickets", "tickets"),
+    ("notifications", "Notifications", "alerts"),
 ]
 
 
@@ -35,7 +37,7 @@ def attention_items(c):
     """Open work for this customer that the logged-in employee can act on (or should know about).
     Each item: (tone, icon, text, link-or-None, link label)."""
     items = []
-    today = date.today()
+    today = local_today()
     warn = Setting.get_int("kyc_expiry_warning_days")
 
     if current_user.can("kyc"):
@@ -61,7 +63,7 @@ def attention_items(c):
         for loan in c.loans.filter(Loan.status == "Overdue").all():
             items.append(("danger", "alert",
                           f"{loan.type_label} {loan.loan_number}: EMI {loan.overdue_days} days overdue "
-                          f"(₹{loan.emi:,.0f}) — follow up and record the payment",
+                          f"({inr(loan.emi)}) — follow up and record the payment",
                           url_for("loans.detail", lid=loan.id), "Collect EMI" if current_user.can("loans", "edit") else "View"))
 
     from ..services import can_decide, can_review
@@ -171,6 +173,12 @@ def profile(cid):
         data["approvals"] = ApprovalRequest.query.filter_by(customer_id=c.id).order_by(ApprovalRequest.created_at.desc()).all()
     elif tab == "tickets":
         data["tickets"] = c.tickets.order_by(Ticket.created_at.desc()).all()
+    elif tab == "notifications":
+        from ..models import Alert
+        from ..services import visible_alerts
+        data["alerts"] = (visible_alerts(current_user).filter(Alert.customer_id == c.id)
+                          .order_by(Alert.is_resolved, Alert.created_at.desc())
+                          .paginate(page=page, per_page=25, error_out=False))
 
     audit("Customer profile viewed", "customer_profile", c.customer_code, f"tab={tab}")
     if tab == "overview":
@@ -183,13 +191,13 @@ def profile(cid):
 
 @bp.route("/<int:cid>/statement")
 @login_required
-@require_perm("transactions", "view")
+@require_perm("transactions", "print")
 def statement(cid):
     """Account statement PDF the branch can print or hand to the customer at the counter."""
     c = ensure_branch_access(db.session.get(Customer, cid))
     if not current_user.can("customer_profile", "view"):
         abort(403)
-    end = parse_date(request.args.get("end")) or date.today()
+    end = parse_date(request.args.get("end")) or local_today()
     start = parse_date(request.args.get("start")) or end - timedelta(days=90)
     acc_id = request.args.get("account", type=int)
     accounts = c.accounts.filter(Account.status != "Pending").order_by(Account.opened_on).all()
@@ -232,7 +240,7 @@ def statement(cid):
         running = opening
         for t in txns:
             running += t.amount if t.txn_type == "Credit" else -t.amount
-            rows.append([t.timestamp.strftime("%d-%m-%Y"), t.txn_ref, Paragraph(escape((t.description or "")[:60]), small),
+            rows.append([to_local(t.timestamp).strftime("%d-%m-%Y"), t.txn_ref, Paragraph(escape((t.description or "")[:60]), small),
                          rs(t.amount) if t.txn_type == "Debit" else "", rs(t.amount) if t.txn_type == "Credit" else "",
                          rs(running)])
         rows.append([end.strftime("%d-%m-%Y"), "", Paragraph(f"<b>Closing balance · {len(txns)} transactions</b>", small),
@@ -273,6 +281,7 @@ def reveal(cid):
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 @require_perm("customer_profile", "create")
+@once_per_form
 def new():
     branches = Branch.query.all() if current_user.sees_all_branches else [current_user.branch]
     if request.method == "POST":
@@ -287,6 +296,12 @@ def new():
             errors.append("PAN must be in the format ABCDE1234F.")
         if not re.fullmatch(r"[6-9]\d{9}", mobile):
             errors.append("Mobile must be a valid 10-digit number.")
+        email = f.get("email", "").strip()
+        if email and not EMAIL_RE.fullmatch(email):
+            errors.append("Enter a valid email address or leave it blank.")
+        dob = parse_date(f.get("dob"))
+        if dob and not date(1900, 1, 1) <= dob <= local_today():
+            errors.append("Enter a real date of birth (not in the future).")
         from ..crypto import search_hash
         if Customer.query.filter_by(pan_hash=search_hash(pan)).first():
             errors.append("A customer with this PAN already exists.")
@@ -298,7 +313,7 @@ def new():
                 flash(e, "danger")
             return render_template("customers/new.html", branches=branches, f=f)
         c = Customer(customer_code=unique_number(Customer, "customer_code", "CIF", 6), name=name,
-                     dob=parse_date(f.get("dob")), gender=f.get("gender"), email=f.get("email"),
+                     dob=dob, gender=f.get("gender"), email=email or None,
                      address=f.get("address"), city=f.get("city"), occupation=f.get("occupation"),
                      branch_id=branch_id, kyc_status="Pending", created_at=datetime.utcnow())
         c.pan = pan
@@ -316,36 +331,62 @@ def new():
 @bp.route("/<int:cid>/edit", methods=["GET", "POST"])
 @login_required
 @require_perm("customer_profile", "edit")
+@once_per_form
 def edit(cid):
+    """Changes to a customer's contact or risk details are maker-checker requests: nothing
+    changes until a checker and a manager approve. New values are stored encrypted in the request."""
+    from ..services import CUSTOMER_EDITABLE, create_approval, pending_request
     c = ensure_branch_access(db.session.get(Customer, cid))
+    pending = pending_request("customer_update", c.id)
     if request.method == "POST":
+        if pending:
+            flash(f"A change request ({pending.request_number}) is already waiting for approval.", "warning")
+            return redirect(url_for("customers.profile", cid=c.id, tab="approvals"))
         f = request.form
-        changes = []
-        for field in ("email", "address", "city", "occupation", "risk_category"):
-            new_val = f.get(field, "").strip()
-            if new_val != (getattr(c, field) or ""):
-                changes.append(field)
-                setattr(c, field, new_val)
         mobile = f.get("mobile", "").strip()
-        if mobile and mobile != c.mobile:
-            c.mobile = mobile
-            changes.append("mobile")
-        if changes:
-            activity(c.id, "Authorized account change", c.customer_code, "Updated: " + ", ".join(changes))
-            audit("Customer profile updated", "customer_profile", c.customer_code, ", ".join(changes))
-            db.session.commit()
-            flash("Customer details updated.", "success")
-        return redirect(url_for("customers.profile", cid=c.id))
+        email = f.get("email", "").strip()
+        problems = []
+        if mobile and not re.fullmatch(r"[6-9]\d{9}", mobile):
+            problems.append("Mobile must be a valid 10-digit Indian mobile number.")
+        if email and not EMAIL_RE.fullmatch(email):
+            problems.append("Enter a valid email address or leave it blank.")
+        if f.get("risk_category") not in ("Low", "Medium", "High"):
+            problems.append("Choose a risk category.")
+        if problems:
+            for p in problems:
+                flash(p, "danger")
+            return redirect(url_for("customers.edit", cid=c.id))
+        changes = {}
+        for field_name in CUSTOMER_EDITABLE:
+            new_val = f.get(field_name, "").strip()
+            limit = {"mobile": 10, "email": 160, "address": 255, "city": 80, "occupation": 80, "risk_category": 10}[field_name]
+            new_val = new_val[:limit]
+            if field_name == "mobile" and not new_val:
+                continue
+            if new_val != (getattr(c, field_name) or ""):
+                changes[field_name] = new_val
+        if not changes:
+            flash("Nothing was changed.", "info")
+            return redirect(url_for("customers.profile", cid=c.id))
+        req = create_approval("customer_update", "customer", c.id, c, None,
+                              f"Update {', '.join(sorted(changes))} for {c.customer_code}", {"changes": changes})
+        audit("Customer change requested", "customer_profile", c.customer_code, ", ".join(sorted(changes)))
+        db.session.commit()
+        flash(f"Change request {req.request_number} sent for maker-checker approval. The customer's details "
+              f"change once it is approved.", "success")
+        return redirect(url_for("customers.profile", cid=c.id, tab="approvals"))
     audit("Sensitive data revealed", "customer_profile", c.customer_code, "edit form")
     db.session.commit()
-    return render_template("customers/edit.html", c=c)
+    return render_template("customers/edit.html", c=c, pending=pending)
 
 
 @bp.route("/search")
 @login_required
 def global_search():
     """Global search across modules — every section respects the employee's permissions."""
-    q = request.args.get("q", "").strip()
+    if not any(current_user.can(m) for m in ("customer_profile", "customer_accounts", "loans")):
+        abort(403)
+    q = request.args.get("q", "").strip()[:80]
     results = {"customers": [], "accounts": [], "loans": []}
     if q:
         if current_user.can("customer_profile"):
@@ -359,6 +400,12 @@ def global_search():
                 Loan.customer_id.in_(matched_ids)).limit(15).all()
         audit("Global search", "search", details=f"term length {len(q)}")
         db.session.commit()
-    if not any(current_user.can(m) for m in ("customer_profile", "customer_accounts", "loans")):
-        abort(403)
+        # One unambiguous hit: go straight there instead of showing a list of one.
+        exact_loan = [ln for ln in results["loans"] if ln.loan_number == q.upper()]
+        if len(exact_loan) == 1:
+            return redirect(url_for("loans.detail", lid=exact_loan[0].id))
+        if len(results["customers"]) == 1:
+            on_account = any(a.account_number == q for a in results["accounts"])
+            return redirect(url_for("customers.profile", cid=results["customers"][0].id,
+                                    **({"tab": "accounts"} if on_account else {})))
     return render_template("search/results.html", q=q, results=results)

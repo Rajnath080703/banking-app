@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, crumbs, page_title with context %}
+{% block title %}{{ 'Invite sent' if purpose == 'invite' else 'Reset link' }}{% endblock %}
+{% block content %}
+{{ crumbs([('User Management', url_for('users.index')), (emp.name, None)]) }}
+<div class="page-head">{{ page_title('Employee created' if purpose == 'invite' else 'Password reset', url_for('users.index')) }}</div>
+<div class="card"><div class="card-body stack">
+  {% if link %}
+    <div class="notice warning">{{ icon('lock', 'sm') }}<span>Email is not configured, so give <strong>{{ emp.email }}</strong> this one-time link yourself, through a channel only they can read. It works once and expires in 48 hours. It will not be shown again.</span></div>
+    <div class="field"><label for="invite-link">One-time link</label><input id="invite-link" type="text" value="{{ link }}" readonly data-select-all></div>
+  {% else %}
+    <div class="notice">{{ icon('mail', 'sm') }}<span>A one-time link was emailed to <strong>{{ emp.email }}</strong>. It expires in 48 hours.</span></div>
+  {% endif %}
+  <p class="muted">{{ emp.name }} sets their own password with the link. Nobody else, including you, ever sees it.</p>
+  <div class="actions"><a class="btn primary" href="{{ url_for('users.edit', eid=emp.id) }}">Manage {{ emp.name }}</a><a class="btn" href="{{ url_for('users.index') }}">All employees</a></div>
+</div></div>
+{% endblock %}

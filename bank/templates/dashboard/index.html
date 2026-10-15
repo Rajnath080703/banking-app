@@ -32,7 +32,7 @@
 <div class="page-head">
   <div>
     <h1>{{ 'Branch Dashboard' if not current_user.sees_all_branches or selected_branch else 'Dashboard' }}</h1>
-    <p>Welcome back, {{ current_user.name }}! Here's what's happening at {{ 'your branch' if not current_user.sees_all_branches else ('the branch' if selected_branch else 'all branches') }} {{ 'today' if rkey == 'today' else RANGE_LABELS.get(rkey, '')|lower if rkey != 'custom' else 'in the selected period' }}.</p>
+    <p>Welcome back, {{ current_user.name }}! Here's what's happening at {{ 'your branch' if not current_user.sees_all_branches else ('the branch' if selected_branch else 'all branches') }} {{ 'today' if rkey == 'today' else RANGE_LABELS.get(rkey, '')|lower if rkey != 'custom' else 'in the selected period' }}. <span class="small muted">Figures as of {{ computed_at|dt('%I:%M %p') }}, refreshed every minute.</span></p>
   </div>
   <div class="actions">
     {% if branches %}

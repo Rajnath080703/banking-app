@@ -13,7 +13,7 @@
 </div>
 <div class="card">
   <div class="card-head">
-    <div class="seg">{% for s in ['', 'Active', 'Matured', 'Pending', 'Closed'] %}<a href="{{ url_for('deposits.index', status=s, q=term) }}" class="{{ 'on' if status == s and not request.args.get('maturing') }}">{{ s or 'All' }}</a>{% endfor %}
+    <div class="seg">{% for s in ['', 'Active', 'Matured', 'Pending', 'Closed', 'Rejected'] %}<a href="{{ url_for('deposits.index', status=s, q=term) }}" class="{{ 'on' if status == s and not request.args.get('maturing') }}">{{ s or 'All' }}</a>{% endfor %}
       <a href="{{ url_for('deposits.index', maturing=1) }}" class="{{ 'on' if request.args.get('maturing') }}">Maturing in 30 days</a></div>
     <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
       <input type="search" name="q" value="{{ term }}" placeholder="FD no / customer / account"><button class="btn">{{ icon('search', 'sm') }}</button></form>

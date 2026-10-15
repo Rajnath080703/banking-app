@@ -8,7 +8,7 @@ from ..extensions import db
 from ..models import MODULES, Alert, AlertRule
 from ..security import audit, require_perm
 from ..services import scan_scheduled_alerts, severity_order, visible_alerts
-from ..utils import parse_float
+from ..money import ZERO, parse_money
 
 bp = Blueprint("alerts", __name__, url_prefix="/alerts")
 
@@ -100,7 +100,9 @@ def rules():
         for rule in AlertRule.query.all():
             prefix = f"r{rule.id}_"
             rule.enabled = bool(request.form.get(prefix + "enabled"))
-            rule.threshold = parse_float(request.form.get(prefix + "threshold"), rule.threshold)
+            new_threshold = parse_money(request.form.get(prefix + "threshold") or "", ZERO)
+            if new_threshold is not None:
+                rule.threshold = new_threshold
             rule.window_minutes = request.form.get(prefix + "window", type=int) or rule.window_minutes
             sev = request.form.get(prefix + "severity")
             if sev in ("Low", "Medium", "High", "Critical"):

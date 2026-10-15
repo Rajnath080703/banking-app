@@ -28,7 +28,7 @@
       <tbody>
       {% for c in results.items %}
         <tr>
-          <td><div class="primary-cell">{{ c.name }}</div><div class="sub-cell">{{ c.occupation or '' }} · {{ c.city or '' }}</div></td>
+          <td><div class="primary-cell"><a href="{{ url_for('customers.profile', cid=c.id) }}">{{ c.name }}</a></div><div class="sub-cell">{{ c.occupation or '' }} · {{ c.city or '' }}</div></td>
           <td class="mono">{{ c.customer_code }}</td>
           <td class="mono">{{ c.mobile_masked }}</td>
           <td class="mono">{{ c.pan_masked }}</td>

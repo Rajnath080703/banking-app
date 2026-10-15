@@ -26,16 +26,33 @@
     </div></div>
   </div>
   {% if current_user.can('branch_management', 'view') %}
-  <div class="card"><div class="card-head"><h2>{{ icon('branch') }} Branch targets</h2></div><div class="card-body flush table-wrap">
+  <div class="card" id="branches"><div class="card-head"><h2>{{ icon('branch') }} Branches</h2><span class="sub">Name, city and targets used on the dashboards</span></div><div class="card-body flush table-wrap">
     {% set be = editable and current_user.can('branch_management', 'edit') %}
-    <table class="table"><thead><tr><th>Branch</th><th>Deposit target (₹)</th><th>Loan target (₹)</th><th>New accounts / month</th></tr></thead><tbody>
-      {% for b in branches %}<tr><td class="primary-cell">{{ b.name }}<div class="sub-cell">{{ b.code }} · {{ b.city }}</div></td>
-        <td><input type="number" name="b{{ b.id }}_dep" value="{{ b.target_deposits|int }}" {{ 'disabled' if not be }}></td>
-        <td><input type="number" name="b{{ b.id }}_loan" value="{{ b.target_loans|int }}" {{ 'disabled' if not be }}></td>
-        <td><input type="number" name="b{{ b.id }}_acc" value="{{ b.target_accounts }}" {{ 'disabled' if not be }}></td></tr>{% endfor %}
+    <table class="table"><thead><tr><th>Code</th><th>Branch name</th><th>City</th><th>Deposit target (₹)</th><th>Loan target (₹)</th><th>New accounts / month</th></tr></thead><tbody>
+      {% for b in branches %}<tr><td class="mono">{{ b.code }}</td>
+        <td><input id="b{{ b.id }}_name" name="b{{ b.id }}_name" value="{{ b.name }}" maxlength="120" {{ 'disabled' if not be }} aria-label="Name of {{ b.code }}"></td>
+        <td><input id="b{{ b.id }}_city" name="b{{ b.id }}_city" value="{{ b.city or '' }}" maxlength="80" {{ 'disabled' if not be }} aria-label="City of {{ b.code }}"></td>
+        <td><input type="number" min="0" name="b{{ b.id }}_dep" value="{{ b.target_deposits|int }}" {{ 'disabled' if not be }}></td>
+        <td><input type="number" min="0" name="b{{ b.id }}_loan" value="{{ b.target_loans|int }}" {{ 'disabled' if not be }}></td>
+        <td><input type="number" min="0" name="b{{ b.id }}_acc" value="{{ b.target_accounts }}" {{ 'disabled' if not be }}></td></tr>{% endfor %}
     </tbody></table>
   </div></div>
   {% endif %}
   {% if editable %}<div class="actions"><button class="btn primary">{{ icon('check', 'sm') }} Save settings</button></div>{% endif %}
 </form>
+{% if current_user.can('branch_management', 'create') and current_user.role.level >= 90 %}
+<form method="post" action="{{ url_for('settings.branch_new') }}" class="card mt">
+  {{ csrf() }}
+  <div class="card-head"><h2>{{ icon('plus') }} Add a branch</h2></div>
+  <div class="card-body form-head">
+    <div class="field"><label for="nb_code">Branch code</label><input id="nb_code" name="code" placeholder="e.g. TNAGAR02" pattern="[A-Za-z0-9]{3,12}" required></div>
+    <div class="field"><label for="nb_name">Branch name</label><input id="nb_name" name="name" required maxlength="120"></div>
+    <div class="field"><label for="nb_city">City</label><input id="nb_city" name="city" maxlength="80"></div>
+    <div class="field"><label for="nb_dep">Deposit target (₹)</label><input id="nb_dep" name="dep" type="number" min="0" value="0"></div>
+    <div class="field"><label for="nb_loan">Loan target (₹)</label><input id="nb_loan" name="loan" type="number" min="0" value="0"></div>
+    <div class="field"><label for="nb_acc">New accounts / month</label><input id="nb_acc" name="acc" type="number" min="0" value="0"></div>
+    <button class="btn primary" type="submit">{{ icon('plus', 'sm') }} Add branch</button>
+  </div>
+</form>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,24 @@
+# Local PostgreSQL for the banking app. Credentials come from .env
+#   start:  docker compose up -d
+#   stop:   docker compose stop
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bank-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "127.0.0.1:5432:5432"   # reachable from this PC only
+    volumes:
+      - bank-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  bank-pgdata:

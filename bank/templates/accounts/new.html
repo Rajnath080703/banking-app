@@ -1,20 +1,44 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, crumbs, csrf with context %}
+{% from "macros.html" import icon, badge, crumbs, csrf with context %}
 {% block title %}Open account{% endblock %}
 {% block content %}
 {{ crumbs([('Accounts', url_for('accounts.index')), ('Open account', None)]) }}
 <div class="page-head"><div><h1>Open a new account</h1><p>New accounts stay <strong>Pending</strong> until a checker reviews and a manager approves.</p></div></div>
 {% if not customer %}{% include "_customer_picker.html" %}{% else %}
-<div class="card"><div class="card-body">
-  <dl class="kv mb"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span></dd>
-    <dt>KYC</dt><dd>{{ customer.kyc_status }}</dd><dt>Branch</dt><dd>{{ customer.branch.name }}</dd></dl>
-  <form method="post" data-confirm="Submit a new account request for {{ customer.name }}?" data-confirm-ok="Submit">
+<div class="card mb"><div class="card-head"><h2>Customer</h2>
+    <a class="small" href="{{ url_for('accounts.new') }}">Change customer</a></div>
+  <div class="card-body">
+  <dl class="kv"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span></dd>
+    <dt>KYC</dt><dd>{{ badge(customer.kyc_status) }}</dd><dt>Branch</dt><dd>{{ customer.branch.name }}</dd>
+    {% set existing = customer.accounts.filter_by().all() %}
+    <dt>Existing accounts</dt><dd>{% for a in existing %}<span class="mono">{{ a.account_number }}</span> {{ a.account_type }} {{ badge(a.status) }}{% if not loop.last %}<br>{% endif %}{% else %}None{% endfor %}</dd></dl>
+</div></div>
+<div class="card"><div class="card-head"><h2>Account details</h2></div><div class="card-body">
+  {% for acc, req in waiting %}
+  <div class="notice warning mb">{{ icon('clock', 'sm') }}<span>A {{ acc.account_type }} account request ({{ acc.account_number }}) is already waiting for approval:
+    {% if current_user.can(req.module) %}<a href="{{ url_for('approvals.detail', rid=req.id) }}">{{ req.request_number }}</a>{% else %}{{ req.request_number }}{% endif %}.
+    Another {{ acc.account_type }} request is not accepted until it is approved or rejected.</span></div>
+  {% endfor %}
+  {% if customer.status and customer.status != 'Active' %}
+  <div class="notice warning">{{ icon('lock', 'sm') }}<span>This customer record is <strong>{{ customer.status }}</strong>. Accounts can be opened only for active customers.</span></div>
+  {% elif customer.kyc_status != 'Verified' %}
+  <div class="notice warning">{{ icon('lock', 'sm') }}<span>KYC is <strong>{{ customer.kyc_status }}</strong>. An account can be opened only after PAN and Aadhaar are verified.
+    {% if current_user.can('kyc', 'create') %}<a href="{{ url_for('kyc.upload', customer=customer.id) }}">Collect a KYC document</a> ·{% endif %}
+    <a href="{{ url_for('customers.profile', cid=customer.id, tab='documents') }}">See documents</a></span></div>
+  {% else %}
+  <form method="post" data-confirm="Request a {account_type} account for {{ customer.name }} ({{ customer.customer_code }}) at {{ customer.branch.name }}? It opens after checker review and manager approval." data-confirm-title="Review account request" data-confirm-ok="Submit for approval">
     {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
-    <div class="field"><label for="account_type">Account type</label>
-      <select id="account_type" name="account_type"><option>Savings</option><option>Current</option></select></div>
-    <div class="actions"><button class="btn primary">{{ icon('check', 'sm') }} Submit for approval</button>
-      <a class="btn ghost" href="{{ url_for('customers.profile', cid=customer.id) }}">Cancel</a></div>
+    <div class="field"><label for="account_type">Account type <span class="neg" aria-hidden="true">*</span></label>
+      <select id="account_type" name="account_type" required>{% for t in types %}<option value="{{ t }}" {{ 'selected' if f.get('account_type') == t }}>{{ t }}</option>{% endfor %}</select>
+      <div class="hint">Savings: 3% a year interest, credited by the savings-interest run. Current: no interest. Both start with a ₹0 balance.</div></div>
+    <ul class="small muted">
+      <li>The account number is issued now; the account cannot be used until it is approved.</li>
+      <li>A checker reviews and a Branch Manager approves it. KYC is checked again at approval.</li>
+    </ul>
+    <div class="actions"><button class="btn primary" data-busy="Submitting…">{{ icon('check', 'sm') }} Submit for approval</button>
+      <a class="btn ghost" href="{{ url_for('accounts.index') }}">Cancel</a></div>
   </form>
+  {% endif %}
 </div></div>
 {% endif %}
 {% endblock %}

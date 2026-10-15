@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import TICKET_STATUSES, Customer, Employee, Ticket, TicketNote
-from ..security import customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
+from ..security import once_per_form, customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
 from ..services import search_customers
 from ..utils import unique_number
 
@@ -38,6 +38,7 @@ def index():
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 @require_perm("tickets", "create")
+@once_per_form
 def new():
     customer = customer_from_request()
     if request.method == "POST" and customer:

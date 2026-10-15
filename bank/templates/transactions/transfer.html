@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, csrf with context %}
+{% block title %}Transfer between accounts{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', url_for('transactions.index')), ('Transfer', None)]) }}
+<div class="page-head"><div><h1>Transfer between accounts</h1>
+  <p>Moves money between two accounts in this bank in one step. Both accounts must be in {{ 'any branch' if current_user.sees_all_branches else 'your branch' }}.</p></div></div>
+
+<div class="card mb"><div class="card-head"><h2>1. Load the accounts</h2></div><div class="card-body">
+  <form method="get" class="filters">
+    <input id="from" type="search" name="from" value="{{ from_no }}" placeholder="From account number" required inputmode="numeric" maxlength="20" aria-label="From account number">
+    {{ icon('chev-right', 'sm') }}
+    <input id="to" type="search" name="to" value="{{ to_no }}" placeholder="To account number" required inputmode="numeric" maxlength="20" aria-label="To account number">
+    <button class="btn primary">{{ icon('search', 'sm') }} Load accounts</button>
+  </form>
+  {% for n in missing %}<div class="notice warning mt">{{ icon('alert', 'sm') }}<span>Account {{ n }} was not found in your branch.</span></div>{% endfor %}
+</div></div>
+
+{% if src and dst %}
+<div class="grid g-2 mb">
+  {% for label, a in [('From (debited)', src), ('To (credited)', dst)] %}
+  <div class="card"><div class="card-head"><h2>{{ label }}</h2>{{ badge(a.status) }}</div><div class="card-body">
+    <dl class="kv"><dt>Customer</dt><dd>{{ a.customer.name }} · <span class="mono">{{ a.customer.customer_code }}</span></dd>
+      <dt>Account</dt><dd class="mono">{{ a.account_number }} · {{ a.account_type }}</dd>
+      <dt>Balance</dt><dd><strong>{{ a.balance|inr(2) }}</strong></dd></dl>
+  </div></div>
+  {% endfor %}
+</div>
+<div class="card"><div class="card-head"><h2>2. Amount</h2></div><div class="card-body">
+  {% if src.id == dst.id %}
+    <div class="notice warning">{{ icon('alert', 'sm') }}<span>Choose two different accounts.</span></div>
+  {% else %}
+  <form method="post" class="form-grid" data-confirm="Transfer {amount} from {{ src.account_number }} ({{ src.customer.name }}) to {{ dst.account_number }} ({{ dst.customer.name }})? Available in the source account: {{ src.balance|inr(2) }}." data-confirm-title="Confirm transfer" data-confirm-ok="Transfer">
+    {{ csrf() }}<input type="hidden" name="from" value="{{ src.account_number }}"><input type="hidden" name="to" value="{{ dst.account_number }}">
+    <div class="field"><label for="amount">Amount (₹) <span class="neg" aria-hidden="true">*</span></label>
+      <input id="amount" name="amount" type="number" step="0.01" min="0.01" inputmode="decimal" data-money required autofocus value="{{ f.get('amount', '') }}">
+      <div class="hint">At or above the high-value limit the transfer goes for maker-checker approval first.</div></div>
+    <div class="field"><label for="narration">Narration</label><input id="narration" name="narration" maxlength="150" value="{{ f.get('narration', '') }}"></div>
+    <div class="full actions"><button class="btn primary" data-busy="Transferring…">{{ icon('swap', 'sm') }} Transfer</button>
+      <a class="btn ghost" href="{{ url_for('transactions.index') }}">Cancel</a></div>
+  </form>
+  {% endif %}
+</div></div>
+{% endif %}
+{% endblock %}

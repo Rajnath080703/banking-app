@@ -22,12 +22,12 @@
     {% if doc.uploaded_by == current_user.id %}
       <div class="notice warning">{{ icon('lock', 'sm') }} You uploaded this document. A different employee must verify it.</div>
     {% else %}
-    <form method="post" action="{{ url_for('kyc.verify', did=doc.id) }}" data-confirm="Record your verification decision for this document?" data-confirm-ok="Confirm">
+    <form method="post" action="{{ url_for('kyc.verify', did=doc.id) }}">
       {{ csrf() }}
-      <div class="field"><label for="remarks">Verification remarks</label><input id="remarks" name="remarks" maxlength="250"></div>
+      <div class="field"><label for="remarks">Remarks <span class="muted small">(required to reject)</span></label><input id="remarks" name="remarks" maxlength="250"></div>
       <div class="actions">
-        {% if current_user.can('kyc', 'approve') %}<button class="btn success" name="decision" value="approve">{{ icon('check', 'sm') }} Verify</button>{% endif %}
-        {% if current_user.can('kyc', 'reject') %}<button class="btn danger" name="decision" value="reject">{{ icon('x', 'sm') }} Reject</button>{% endif %}
+        {% if current_user.can('kyc', 'approve') %}<button class="btn success" name="decision" value="approve" data-confirm="Mark {{ doc.doc_type }} of {{ doc.customer.name }} as verified? You confirm the original was seen and matches the details." data-confirm-title="Verify document" data-confirm-tone="success" data-confirm-ok="Verify">{{ icon('check', 'sm') }} Verify</button>{% endif %}
+        {% if current_user.can('kyc', 'reject') %}<button class="btn danger" name="decision" value="reject" data-confirm="Reject {{ doc.doc_type }} of {{ doc.customer.name }}? The customer will need to bring a valid document." data-confirm-title="Reject document" data-confirm-tone="danger" data-confirm-ok="Reject" data-confirm-reason="Reason for rejecting (required)">{{ icon('x', 'sm') }} Reject</button>{% endif %}
       </div>
     </form>
     {% endif %}

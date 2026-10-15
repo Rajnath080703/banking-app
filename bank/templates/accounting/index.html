@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, page_title with context %}
+{% block title %}Accounting{% endblock %}
+{% block content %}
+{{ crumbs([('Accounting', None)]) }}
+<div class="page-head">
+  {{ page_title('General Ledger', url_for('dashboard.index'), 'Double-entry books: every money movement posts balanced debit and credit lines.') }}
+  <div class="actions">
+    {% if branches %}
+    <form method="get" class="filters"><select name="branch" data-autosubmit aria-label="Branch"><option value="">All branches</option>
+      {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if selected_branch == b.id }}>{{ b.name }}</option>{% endfor %}</select></form>
+    {% endif %}
+    <a class="btn" href="{{ url_for('accounting.journal') }}">{{ icon('file', 'sm') }} Journal</a>
+    {% if current_user.can('interest') %}<a class="btn" href="{{ url_for('accounting.interest') }}">{{ icon('trend-up', 'sm') }} Savings interest</a>{% endif %}
+  </div>
+</div>
+
+<div class="card mb">
+  <div class="card-head"><h2>Reconciliation</h2>
+    {% set all_ok = checks|selectattr('ok')|list|length == checks|length %}
+    {{ badge('All balanced' if all_ok else 'Difference found', 'success' if all_ok else 'danger') }}</div>
+  <div class="card-body flush table-wrap">
+    <table class="table">
+      <thead><tr><th>Check</th><th class="num">General ledger</th><th class="num">Product records</th><th>Result</th></tr></thead>
+      <tbody>{% for c in checks %}
+        <tr><td>{{ c.name }}</td>
+          <td class="num">{{ c.ledger if c.count else c.ledger|inr(2) }}</td>
+          <td class="num">{{ c.books if c.count else c.books|inr(2) }}</td>
+          <td>{{ badge('Matches' if c.ok else 'Mismatch', 'success' if c.ok else 'danger') }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>Trial balance</h2><span class="sub">All posted entries to date</span></div>
+  <div class="card-body flush table-wrap">
+    <table class="table">
+      <thead><tr><th>GL</th><th>Account</th><th>Type</th><th class="num">Debits</th><th class="num">Credits</th><th class="num">Balance</th></tr></thead>
+      <tbody>{% for r in tb %}
+        <tr><td class="mono"><a href="{{ url_for('accounting.journal', gl=r.code) }}">{{ r.code }}</a></td><td>{{ r.name }}</td><td>{{ r.type }}</td>
+          <td class="num">{{ r.debit|inr(2) }}</td><td class="num">{{ r.credit|inr(2) }}</td><td class="num"><strong>{{ r.balance|inr(2) }}</strong></td></tr>
+      {% endfor %}</tbody>
+      <tfoot><tr><td></td><td><strong>Total</strong></td><td></td>
+        <td class="num"><strong>{{ totals.debit|inr(2) }}</strong></td><td class="num"><strong>{{ totals.credit|inr(2) }}</strong></td>
+        <td>{{ badge('Balanced' if totals.debit == totals.credit else 'Out of balance', 'success' if totals.debit == totals.credit else 'danger') }}</td></tr></tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

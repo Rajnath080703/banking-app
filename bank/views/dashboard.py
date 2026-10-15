@@ -1,16 +1,16 @@
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 
 from flask import Blueprint, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from ..extensions import db
+from ..extensions import cache, db
 from ..models import (Account, Activity, Alert, ApprovalRequest, Branch, Customer, Document,
                       FixedDeposit, Loan, LoanRepayment, Setting, Ticket, Transaction)
 from ..security import require_perm
-from ..services import money_sum, scan_scheduled_alerts, severity_order, visible_alerts
+from ..services import money_sum, severity_order, visible_alerts
 from ..utils import (add_months, compare_label, date_range_from_request, day_bounds, pct_change,
-                     previous_period)
+                     previous_period, sql_day, sql_month, local_today)
 
 bp = Blueprint("dashboard", __name__)
 
@@ -24,7 +24,7 @@ def _branch_ids():
 
 def compute_kpis(branch_ids, start, end):
     s, e = day_bounds(start, end)
-    today = date.today()
+    today = local_today()
     kyc_days = Setting.get_int("kyc_expiry_warning_days")
     in_b = lambda model: model.branch_id.in_(branch_ids)  # noqa: E731
     k = {}
@@ -68,8 +68,7 @@ def compute_charts(branch_ids, start, end):
     charts = {}
     days = (end - start).days
     # Income vs outgoing + volume: daily for ranges <= 62 days, else monthly.
-    fmt = "%Y-%m-%d" if days <= 62 else "%Y-%m"
-    bucket = func.strftime(fmt, Transaction.timestamp)
+    bucket = sql_day(Transaction.timestamp) if days <= 62 else sql_month(Transaction.timestamp)
     rows = (db.session.query(bucket, Transaction.txn_type, func.sum(Transaction.amount), func.count())
             .filter(in_b(Transaction), Transaction.timestamp.between(s, e))
             .group_by(bucket, Transaction.txn_type).all())
@@ -82,8 +81,8 @@ def compute_charts(branch_ids, start, end):
     for r in rows:
         vol[r[0]] = vol.get(r[0], 0) + r[3]
     pretty = [(lbl[8:] + "/" + lbl[5:7]) if len(lbl) == 10 else lbl for lbl in labels]
-    charts["flow"] = {"labels": pretty, "income": [round(inc.get(lbl, 0)) for lbl in labels],
-                      "outgoing": [round(out.get(lbl, 0)) for lbl in labels]}
+    charts["flow"] = {"labels": pretty, "income": [float(inc.get(lbl, 0)) for lbl in labels],
+                      "outgoing": [float(out.get(lbl, 0)) for lbl in labels]}
     charts["volume"] = {"labels": pretty, "values": [vol.get(lbl, 0) for lbl in labels]}
 
     acc = dict(db.session.query(Account.status, func.count()).filter(in_b(Account))
@@ -95,7 +94,7 @@ def compute_charts(branch_ids, start, end):
                        "values": [ln.get(x, 0) for x in ["Active", "Closed", "Overdue", "Pending"]]}
 
     # Branch target vs achievement (current month: new deposits+loans vs pro-rated target)
-    month_start = date.today().replace(day=1)
+    month_start = local_today().replace(day=1)
     targets = []
     for b in Branch.query.filter(Branch.id.in_(branch_ids)).all():
         dep = money_sum(Account.balance, Account.branch_id == b.id, Account.status != "Closed") + \
@@ -106,24 +105,24 @@ def compute_charts(branch_ids, start, end):
                         "loan_target": b.target_loans, "loan_actual": loans,
                         "acc_target": b.target_accounts, "acc_actual": new_acc})
     charts["targets"] = {"labels": [t["name"] for t in targets],
-                         "deposit_pct": [round(t["deposit_actual"] / t["deposit_target"] * 100, 1) if t["deposit_target"] else 0 for t in targets],
-                         "loan_pct": [round(t["loan_actual"] / t["loan_target"] * 100, 1) if t["loan_target"] else 0 for t in targets]}
+                         "deposit_pct": [round(float(t["deposit_actual"] / t["deposit_target"] * 100), 1) if t["deposit_target"] else 0 for t in targets],
+                         "loan_pct": [round(float(t["loan_actual"] / t["loan_target"] * 100), 1) if t["loan_target"] else 0 for t in targets]}
 
     # 12-month deposit & loan trends (new FDs + net credits / disbursements)
-    months = [add_months(date.today().replace(day=1), -i) for i in range(11, -1, -1)]
+    months = [add_months(local_today().replace(day=1), -i) for i in range(11, -1, -1)]
     m_labels = [m.strftime("%b %y") for m in months]
     keys = [m.strftime("%Y-%m") for m in months]
-    fd_rows = dict(db.session.query(func.strftime("%Y-%m", FixedDeposit.start_date), func.sum(FixedDeposit.principal))
-                   .filter(in_b(FixedDeposit)).group_by(func.strftime("%Y-%m", FixedDeposit.start_date)).all())
-    cr_rows = dict(db.session.query(func.strftime("%Y-%m", Transaction.timestamp), func.sum(Transaction.amount))
+    fd_rows = dict(db.session.query(sql_month(FixedDeposit.start_date, False), func.sum(FixedDeposit.principal))
+                   .filter(in_b(FixedDeposit)).group_by(sql_month(FixedDeposit.start_date, False)).all())
+    cr_rows = dict(db.session.query(sql_month(Transaction.timestamp), func.sum(Transaction.amount))
                    .filter(in_b(Transaction), Transaction.txn_type == "Credit")
-                   .group_by(func.strftime("%Y-%m", Transaction.timestamp)).all())
-    ln_rows = dict(db.session.query(func.strftime("%Y-%m", Loan.disbursed_on), func.sum(Loan.amount))
+                   .group_by(sql_month(Transaction.timestamp)).all())
+    ln_rows = dict(db.session.query(sql_month(Loan.disbursed_on, False), func.sum(Loan.amount))
                    .filter(in_b(Loan), Loan.disbursed_on != None)  # noqa
-                   .group_by(func.strftime("%Y-%m", Loan.disbursed_on)).all())
+                   .group_by(sql_month(Loan.disbursed_on, False)).all())
     charts["trends"] = {"labels": m_labels,
-                        "deposits": [round((fd_rows.get(k) or 0) + (cr_rows.get(k) or 0)) for k in keys],
-                        "loans": [round(ln_rows.get(k) or 0) for k in keys]}
+                        "deposits": [float((fd_rows.get(k) or 0) + (cr_rows.get(k) or 0)) for k in keys],
+                        "loans": [float(ln_rows.get(k) or 0) for k in keys]}
     return charts, targets
 
 
@@ -134,12 +133,15 @@ def compute_trends(branch_ids, start, end, rkey, k):
     s, e = day_bounds(start, end)
     ps, pe = day_bounds(p_start, p_end)
     in_b = lambda model: model.branch_id.in_(branch_ids)  # noqa: E731
-    today = date.today()
+    today = local_today()
     warn = Setting.get_int("kyc_expiry_warning_days")
 
     prev_customers = Customer.query.filter(in_b(Customer), Customer.created_at < s).count()
     net_flow = k["income"] - k["outgoing"]
-    fd_new = money_sum(FixedDeposit.principal, in_b(FixedDeposit), FixedDeposit.start_date.between(start, end))
+    # Only FDs that are part of total deposits now: a pending FD's funding debit is already in
+    # net_flow but the FD itself is not counted yet (a rejected one was refunded; a closed one paid out).
+    fd_new = money_sum(FixedDeposit.principal, in_b(FixedDeposit), FixedDeposit.status == "Active",
+                       FixedDeposit.start_date.between(start, end))
     prev_deposits = k["total_deposits"] - net_flow - fd_new
     prev_disbursed = k["loans_disbursed_total"] - k["loan_disbursement"]
     appr = lambda a, b: ApprovalRequest.query.filter(in_b(ApprovalRequest), ApprovalRequest.created_at.between(a, b)).count()  # noqa: E731
@@ -164,15 +166,28 @@ def compute_trends(branch_ids, start, end, rkey, k):
     return t
 
 
+def cached_metrics(branch_ids, start, end, rkey, with_trends=True):
+    """Dashboard figures are the same for everyone looking at the same branches and period,
+    so they are cached for 60 s (shared via Redis in production). Employee-specific panels
+    (alerts, recent activity) are never cached."""
+    key = f"dash:v1:{','.join(map(str, sorted(branch_ids)))}:{start}:{end}:{rkey}:{int(with_trends)}"
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    kpis = compute_kpis(branch_ids, start, end)
+    trends = compute_trends(branch_ids, start, end, rkey, kpis) if with_trends else {}
+    charts, targets = compute_charts(branch_ids, start, end)
+    value = (kpis, trends, charts, targets, datetime.utcnow())
+    cache.set(key, value, timeout=60)
+    return value
+
+
 @bp.route("/")
 @login_required
 def index():
-    scan_scheduled_alerts()
     start, end, rkey = date_range_from_request("month")
     branch_ids = _branch_ids()
-    kpis = compute_kpis(branch_ids, start, end)
-    trends = compute_trends(branch_ids, start, end, rkey, kpis)
-    charts, targets = compute_charts(branch_ids, start, end)
+    kpis, trends, charts, targets, computed_at = cached_metrics(branch_ids, start, end, rkey)
 
     # Branch target vs achievement, aggregated over the branches in view.
     tot = lambda key: sum(t[key] for t in targets)  # noqa: E731
@@ -188,7 +203,7 @@ def index():
     alerts = (visible_alerts(current_user).filter_by(is_resolved=False)
               .order_by(severity_order(), Alert.created_at.desc()).limit(5).all())
     branches = Branch.query.all() if current_user.sees_all_branches else []
-    return render_template("dashboard/index.html", k=kpis, tr=trends, charts=charts, targets=targets,
+    return render_template("dashboard/index.html", k=kpis, tr=trends, charts=charts, targets=targets, computed_at=computed_at,
                            target_bars=target_bars, top_accounts=top_accounts, recent=recent, alerts=alerts,
                            start=start, end=end, rkey=rkey, cmp=compare_label(rkey),
                            branches=branches, selected_branch=request.args.get("branch", type=int))
@@ -204,8 +219,7 @@ def branch():
     else:
         branch_id = current_user.branch_id
     b = db.session.get(Branch, branch_id)
-    kpis = compute_kpis([branch_id], start, end)
-    charts, targets = compute_charts([branch_id], start, end)
+    kpis, _trends, charts, targets, computed_at = cached_metrics([branch_id], start, end, rkey, with_trends=False)
     branches = Branch.query.all() if current_user.sees_all_branches else []
     return render_template("dashboard/branch.html", b=b, k=kpis, charts=charts, t=targets[0] if targets else None,
                            start=start, end=end, rkey=rkey, branches=branches)

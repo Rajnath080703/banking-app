@@ -12,10 +12,11 @@
 {% set ep = request.endpoint or '' %}
 {% macro nav_link(endpoint, label, icon_name, active=None, count=None, args={}) -%}
   <a href="{{ url_for(endpoint, **args) }}" class="{{ 'active' if (active if active is not none else ep == endpoint) }}">
-    {{ icon(icon_name) }}<span>{{ label }}</span>{% if count %}<span class="count">{{ count }}</span>{% endif %}
+    {{ icon(icon_name) }}<span>{{ label }}</span>{% if count %}<span class="count" aria-label="{{ count }} waiting">{{ count }}</span>{% endif %}
   </a>
 {%- endmacro %}
 <body data-session-timeout="{{ session_timeout or 0 }}">
+<a class="skip-link" href="#main">Skip to content</a>
 <div class="app">
   <aside class="sidebar" aria-label="Main navigation">
     <div class="brand">
@@ -49,14 +50,16 @@
       </details>
       {% endif %}
       {% if current_user.can('transactions') %}{{ nav_link('transactions.index', 'Transactions', 'swap', ep.startswith('transactions.')) }}{% endif %}
-      {% if current_user.can('kyc') %}{{ nav_link('kyc.index', 'KYC & Documents', 'file', ep.startswith('kyc.')) }}{% endif %}
+      {% if current_user.can('kyc') %}{{ nav_link('kyc.index', 'KYC & Documents', 'file', ep.startswith('kyc.'), work.kyc if work) }}{% endif %}
       {% if current_user.can('loan_approval') or current_user.can('customer_accounts', 'approve') or current_user.can('deposits', 'approve') %}
-        {{ nav_link('approvals.index', 'Approvals', 'approval', ep.startswith('approvals.')) }}
+        {{ nav_link('approvals.index', 'Approvals', 'approval', ep.startswith('approvals.'), work.approvals if work) }}
       {% endif %}
       {% if current_user.can('tickets') %}{{ nav_link('tickets.index', 'Tickets', 'ticket', ep.startswith('tickets.')) }}{% endif %}
       {% if current_user.can('branch_management') %}{{ nav_link('dashboard.branch', 'Branch Dashboard', 'branch') }}{% endif %}
       {% if current_user.can('reports') %}{{ nav_link('reports.index', 'Reports', 'chart', ep.startswith('reports.')) }}{% endif %}
       {% if current_user.can('alerts') %}{{ nav_link('alerts.index', 'Alerts & Notifications', 'bell', ep.startswith('alerts.'), unread_alerts) }}{% endif %}
+      {% if current_user.can('accounting') %}{{ nav_link('accounting.index', 'Accounting', 'chart', ep in ('accounting.index', 'accounting.journal')) }}{% endif %}
+      {% if current_user.can('interest') %}{{ nav_link('accounting.interest', 'Savings Interest', 'trend-up', ep == 'accounting.interest') }}{% endif %}
       {% if current_user.can('audit_logs') %}{{ nav_link('audit.index', 'Audit Logs', 'audit', ep.startswith('audit.')) }}{% endif %}
       {% if current_user.can('user_management') %}{{ nav_link('users.index', 'User Management', 'users', ep.startswith('users.')) }}{% endif %}
       {% if current_user.can('settings') %}{{ nav_link('settings.index', 'Settings', 'settings', ep == 'settings.index') }}{% endif %}
@@ -99,7 +102,7 @@
       </div>
     </header>
 
-    <main class="content">
+    <main class="content" id="main" tabindex="-1">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}<div class="flashes">
           {% for cat, msg in messages %}<div class="flash {{ cat if cat in ('success','danger','warning','info') else 'info' }}" role="status">
@@ -111,10 +114,12 @@
   </div>
 </div>
 
-<div class="modal-backdrop hidden" id="confirm-modal" role="dialog" aria-modal="true">
+<div class="modal-backdrop hidden" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text">
   <div class="modal">
-    <h3>{{ icon('alert') }}<span data-confirm-title>Please confirm</span></h3>
-    <p data-confirm-text></p>
+    <h3>{{ icon('alert') }}<span data-confirm-title id="confirm-title">Please confirm</span></h3>
+    <p data-confirm-text id="confirm-text"></p>
+    <div class="field hidden" data-confirm-reason-wrap><label for="confirm-reason" data-confirm-reason-label>Reason</label>
+      <textarea id="confirm-reason" maxlength="200" rows="3"></textarea><div class="hint neg hidden" data-confirm-reason-error>Enter a reason to continue.</div></div>
     <div class="actions">
       <button type="button" class="btn" data-confirm-cancel>Cancel</button>
       <button type="button" class="btn primary" data-confirm-ok>Confirm</button>

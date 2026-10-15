@@ -20,7 +20,7 @@
     <table class="table">
       <thead><tr>{% for c in cols %}<th class="{{ 'num' if '₹' in c or c in ('Transactions', 'Customers', 'Documents', 'Verified', 'New Accounts', 'Overdue Loans', 'Days Overdue', 'Rate %') }}">{{ c }}</th>{% endfor %}</tr></thead>
       <tbody>{% for r in rows %}<tr>{% for v in r %}
-        <td class="{{ 'num' if v is number }}">{{ ('{:,.2f}'.format(v) if v is float else v) if v is not none }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        <td class="{{ 'num' if v is number }}">{{ v|cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
     </table>
     {% if total > rows|length %}<p class="small muted center mt mb">Showing first {{ rows|length }} of {{ total }} rows. Export for the full data set.</p>{% endif %}
     {% else %}{{ empty('No data for this period.', 'chart') }}{% endif %}

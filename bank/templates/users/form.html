@@ -33,7 +33,7 @@
       <dl class="kv"><dt>Status</dt><dd>{% if emp.locked_until and emp.locked_until > now.utcnow() %}{{ badge('Locked', 'danger') }}{% elif emp.is_active_flag %}{{ badge('Active') }}{% else %}{{ badge('Disabled', 'neutral') }}{% endif %}</dd>
         <dt>Failed attempts</dt><dd>{{ emp.failed_attempts or 0 }}</dd><dt>MFA</dt><dd>{{ 'Enabled' if emp.mfa_enabled else 'Not enrolled' }}</dd>
         <dt>Password changed</dt><dd>{{ emp.password_changed_at|dt }}</dd></dl>
-      {% for action, label, msg, tone in [('reset', 'Reset password', 'Generate a new temporary password and sign out all sessions?', 'danger'), ('unlock', 'Unlock account', 'Clear failed attempts and unlock this account?', 'primary'), ('revoke', 'Sign out all sessions', 'Force sign-out of every active session for this employee?', 'danger'), ('reset_mfa', 'Reset MFA', 'Remove this employee’s authenticator enrolment?', 'danger')] %}
+      {% for action, label, msg, tone in [('reset', 'Send password reset link', 'Disable the current password, sign out all sessions and issue a one-time reset link?', 'danger'), ('unlock', 'Unlock account', 'Clear failed attempts and unlock this account?', 'primary'), ('revoke', 'Sign out all sessions', 'Force sign-out of every active session for this employee?', 'danger'), ('reset_mfa', 'Reset MFA', 'Remove this employee’s authenticator enrolment?', 'danger')] %}
         <form method="post" data-confirm="{{ msg }}" data-confirm-tone="{{ tone }}" data-confirm-ok="{{ label }}">{{ csrf() }}<input type="hidden" name="action" value="{{ action }}"><button class="btn block">{{ label }}</button></form>
       {% endfor %}
     </div></div>

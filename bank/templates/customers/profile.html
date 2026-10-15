@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf, page_title with context %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf, page_title, txn_badges, reverse_btn with context %}
 {% block title %}{{ c.name }} · Customer 360{% endblock %}
 
 {% macro accounts_table(accounts) %}
@@ -11,9 +11,11 @@
         <td>{{ a.last_txn_on|d }}</td><td>{{ badge(a.status) }}</td><td class="num">{{ a.interest_rate }}%</td>
         <td class="num"><strong>{{ a.balance|inr(2) }}</strong></td>
         <td class="right nowrap">
-          {% if current_user.can('transactions', 'create') and a.status not in ('Closed', 'Pending') %}<a class="btn sm" href="{{ url_for('transactions.new', account=a.account_number) }}">Post txn</a>{% endif %}
-          {% if current_user.can('customer_accounts', 'edit') and a.status not in ('Closed', 'Pending') %}
-          <form method="post" action="{{ url_for('accounts.close', aid=a.id) }}" class="reveal-form" data-confirm="Raise a closure request for account {{ a.account_number }}? It will go through maker-checker approval." data-confirm-title="Close account" data-confirm-tone="danger" data-confirm-ok="Request closure">
+          {% if current_user.can('transactions', 'create') and a.status not in ('Closed', 'Pending', 'Rejected') %}<a class="btn sm" href="{{ url_for('transactions.new', account=a.account_number) }}">Post txn</a>{% endif %}
+          {% if current_user.can('customer_accounts', 'edit') and a.status not in ('Closed', 'Pending', 'Rejected') %}
+          <form method="post" action="{{ url_for('accounts.freeze', aid=a.id) }}" class="reveal-form" data-confirm="{{ 'Request unfreezing' if a.status == 'Frozen' else 'Request a freeze on' }} account {{ a.account_number }}? A frozen account accepts deposits but blocks withdrawals. This needs maker-checker approval." data-confirm-title="{{ 'Unfreeze' if a.status == 'Frozen' else 'Freeze' }} account" data-confirm-tone="danger" data-confirm-ok="Send request" data-confirm-reason="Reason (required)">
+            {{ csrf() }}<input type="hidden" name="reason" value=""><button class="btn sm ghost" type="submit">{{ 'Unfreeze' if a.status == 'Frozen' else 'Freeze' }}</button></form>
+          <form method="post" action="{{ url_for('accounts.close', aid=a.id) }}" class="reveal-form" data-confirm="Raise a closure request for account {{ a.account_number }}? The balance must be zero. It will go through maker-checker approval." data-confirm-title="Close account" data-confirm-tone="danger" data-confirm-ok="Request closure">
             {{ csrf() }}<button class="btn sm ghost" type="submit">Close</button></form>{% endif %}
         </td></tr>
     {% endfor %}</tbody>
@@ -127,12 +129,13 @@
 {% set pa = data.primary_account %}
 {% set actions = [
     ('transactions', 'create', url_for('transactions.new', account=pa.account_number) if pa else None, 'swap', 'Post cash deposit / withdrawal', 'Primary a/c ' ~ pa.account_number if pa else 'No active account'),
-    ('transactions', 'view', url_for('customers.statement', cid=c.id), 'download', 'Print account statement', 'PDF, last 90 days — for the customer'),
-    ('loans', 'create', url_for('loans.new', customer=c.id), 'rupee', 'New loan application', 'Goes to checker & manager approval'),
+    ('transactions', 'create', url_for('transactions.transfer', **{'from': pa.account_number}) if pa else None, 'swap', 'Transfer between accounts', 'From a/c ' ~ pa.account_number if pa else 'No active account'),
+    ('transactions', 'print', url_for('customers.statement', cid=c.id), 'download', 'Print account statement', 'PDF, last 90 days — for the customer'),
+    ('loans', 'create', url_for('loans.new', customer=c.id), 'rupee', 'New loan application', 'Goes to checker & manager approval' if c.kyc_status == 'Verified' else 'Needs verified KYC first'),
     ('deposits', 'create', url_for('deposits.new', customer=c.id), 'piggy', 'Book fixed deposit', 'Debits the funding account'),
-    ('customer_accounts', 'create', url_for('accounts.new', customer=c.id), 'wallet', 'Open new account', 'Savings / current, needs approval'),
+    ('customer_accounts', 'create', url_for('accounts.new', customer=c.id), 'wallet', 'Open new account', 'Savings / current, needs approval' if c.kyc_status == 'Verified' else 'Needs verified KYC first'),
     ('kyc', 'create', url_for('kyc.upload', customer=c.id), 'upload', 'Collect KYC document', 'Upload scan for verification'),
-    ('customer_profile', 'edit', url_for('customers.edit', cid=c.id), 'edit', 'Update contact details', 'Mobile, email, address'),
+    ('customer_profile', 'edit', url_for('customers.edit', cid=c.id), 'edit', 'Request contact change', 'Mobile, email, address — needs approval'),
     ('tickets', 'create', url_for('tickets.new', customer=c.id), 'ticket', 'Log complaint / service request', s.open_tickets ~ ' open now' if s.open_tickets else 'Track to resolution'),
 ] %}
 {% set allowed = actions|selectattr(2)|list %}
@@ -160,10 +163,13 @@
 <div class="card"><div class="card-body flush table-wrap">
   {% if data.deposits %}
   <table class="table">
-    <thead><tr><th>FD No</th><th class="num">Principal</th><th class="num">Rate</th><th>Tenure</th><th>Start</th><th>Maturity</th><th class="num">Maturity amount</th><th class="num">Interest</th><th>Status</th></tr></thead>
+    <thead><tr><th>FD No</th><th class="num">Principal</th><th class="num">Rate</th><th>Tenure</th><th>Start</th><th>Maturity</th><th class="num">Maturity amount</th><th class="num">Paid out</th><th>Status</th><th></th></tr></thead>
     <tbody>{% for fd in data.deposits %}
-      <tr><td class="mono primary-cell">{{ fd.fd_number }}</td><td class="num">{{ fd.principal|inr }}</td><td class="num">{{ fd.interest_rate }}%</td><td>{{ fd.tenure_months }} months</td>
-        <td>{{ fd.start_date|d }}</td><td>{{ fd.maturity_date|d }}</td><td class="num">{{ fd.maturity_amount|inr }}</td><td class="num pos">{{ (fd.maturity_amount - fd.principal)|inr }}</td><td>{{ badge(fd.status) }}</td></tr>
+      <tr><td class="mono primary-cell">{{ fd.fd_number }}</td><td class="num">{{ fd.principal|inr(2) }}</td><td class="num">{{ fd.interest_rate }}%</td><td>{{ fd.tenure_months }} months</td>
+        <td>{{ fd.start_date|d }}</td><td>{{ fd.maturity_date|d }}</td><td class="num">{{ fd.maturity_amount|inr(2) }}</td>
+        <td class="num">{% if fd.paid_out_amount %}{{ fd.paid_out_amount|inr(2) }}<div class="sub-cell">{{ fd.paid_out_on|d }}{{ ' · early' if fd.premature }}</div>{% else %}—{% endif %}</td>
+        <td>{{ badge(fd.status) }}</td>
+        <td class="right">{% if fd.status == 'Active' and current_user.can('deposits', 'edit') %}<a class="btn sm ghost" href="{{ url_for('deposits.close', fid=fd.id) }}">Close early</a>{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table>
   {% else %}{{ empty('No fixed deposits.', 'piggy') }}{% endif %}
@@ -183,7 +189,7 @@
         <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
           <td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
           <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
-          <td>{% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}</td></tr>
+          <td class="right nowrap">{{ txn_badges(t) }} {{ reverse_btn(t) }}</td></tr>
       {% endfor %}</tbody>
     </table>
     {% else %}{{ empty('No transactions.', 'swap') }}{% endif %}
@@ -246,6 +252,21 @@
   </table>
   {% else %}{{ empty('No approval requests.', 'approval') }}{% endif %}
 </div></div>
+
+{% elif tab == 'notifications' %}
+<div class="card">
+  <div class="card-head"><h2>Notifications</h2><span class="sub">Alerts about this customer that your role can see</span></div>
+  <div class="card-body flush">
+    {% for a in data.alerts.items %}
+    <div class="alert-item {{ 'unread' if not a.is_read }}">
+      <span class="sev {{ a.severity }}">{{ icon('alert' if a.severity in ('High', 'Critical') else 'bell', 'sm') }}</span>
+      <div class="grow"><a class="title" href="{{ url_for('alerts.open_alert', aid=a.id) }}">{{ a.title }}</a> {{ badge(a.severity) }} {{ badge(a.type_label, 'neutral') }}
+        <div class="msg">{{ a.message }}</div><div class="msg">{{ a.created_at|dt }}{% if a.is_resolved %} · Resolved{% endif %}</div></div>
+    </div>
+    {% else %}{{ empty('No notifications for this customer.', 'bell') }}{% endfor %}
+  </div>
+  {{ pager(data.alerts, 'customers.profile') }}
+</div>
 
 {% elif tab == 'tickets' %}
 <div class="card">

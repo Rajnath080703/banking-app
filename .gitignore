@@ -1,0 +1,14 @@
+# secrets and local data
+.env
+instance/
+*.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env.*
+!deploy/env.prod.example
+backups/
+.coverage
+.coverage.*

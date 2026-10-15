@@ -167,3 +167,8 @@ a.kpi-mini:hover { text-decoration: none; box-shadow: var(--shadow); }
   .c360-stats { width: 100%; }
   .c360-stats > div { min-width: 0; flex: 1; padding: 10px 12px; }
 }
+
+/* keyboard users: jump past the sidebar */
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 200; background: var(--primary); color: #fff; padding: 8px 14px; border-radius: 8px; font-weight: 600; }
+.skip-link:focus { top: 12px; text-decoration: none; }
+button[aria-busy="true"] { opacity: .7; cursor: progress; }

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, empty, crumbs, pager, page_title with context %}
+{% block title %}Journal{% endblock %}
+{% block content %}
+{{ crumbs([('Accounting', url_for('accounting.index')), ('Journal', None)]) }}
+<div class="page-head">{{ page_title('Journal entries', url_for('accounting.index'), 'Append-only: entries cannot be edited or deleted, only reversed by a new entry.') }}</div>
+<div class="card">
+  <form method="get" class="toolbar">
+    <div class="field"><label for="gl">GL account</label><select id="gl" name="gl" data-autosubmit><option value="">All accounts</option>
+      {% for a in accounts %}<option value="{{ a.code }}" {{ 'selected' if gl == a.code }}>{{ a.code }} · {{ a.name }}</option>{% endfor %}</select></div>
+    <div class="grow-search">{{ icon('search', 'sm') }}<input type="search" name="ref" value="{{ ref }}" placeholder="Entry ref, transaction ref or loan number" aria-label="Search journal"></div>
+    <button class="btn primary">Search</button>
+  </form>
+  <div class="card-body flush table-wrap">
+    {% if entries.items %}
+    <table class="table">
+      <thead><tr><th>Entry</th><th>Value date</th><th>Narration</th><th>GL</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead>
+      <tbody>{% for e in entries.items %}
+        {% for l in e.lines|sort(attribute='credit') %}
+        <tr>
+          {% if loop.first %}<td rowspan="{{ e.lines|length }}" class="mono">{{ e.entry_ref }}<div class="sub-cell">{{ e.source_ref or '' }}</div></td>
+          <td rowspan="{{ e.lines|length }}" class="nowrap">{{ e.value_date|d }}</td>
+          <td rowspan="{{ e.lines|length }}">{{ e.narration }}</td>{% endif %}
+          <td class="mono">{{ l.gl_code }}</td>
+          <td class="num">{{ l.debit|inr(2) if l.debit }}</td><td class="num">{{ l.credit|inr(2) if l.credit }}</td>
+        </tr>
+        {% endfor %}
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No journal entries yet.', 'file') }}{% endif %}
+  </div>
+  {{ pager(entries, 'accounting.journal') }}
+</div>
+{% endblock %}

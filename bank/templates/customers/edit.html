@@ -3,9 +3,10 @@
 {% block title %}Edit {{ c.name }}{% endblock %}
 {% block content %}
 {{ crumbs([('Customer 360', url_for('customers.search')), (c.name, url_for('customers.profile', cid=c.id)), ('Edit', None)]) }}
-<div class="page-head"><div><h1>Edit customer details</h1><p>Changes are recorded in the activity timeline and audit log.</p></div></div>
+<div class="page-head"><div><h1>Request a change to customer details</h1><p>Changes go to a checker and a manager for approval before they take effect. The request is recorded in the audit log.</p></div></div>
+{% if pending %}<div class="notice warning mb">{{ icon('clock', 'sm') }}<span>Change request <a href="{{ url_for('approvals.detail', rid=pending.id) }}">{{ pending.request_number }}</a> is already waiting for approval. A new request can be raised once it is decided.</span></div>{% endif %}
 <div class="card"><div class="card-body">
-  <form method="post" class="form-grid" data-confirm="Save changes to {{ c.name }}'s profile?" data-confirm-title="Confirm profile change" data-confirm-ok="Save">
+  <form method="post" class="form-grid" data-confirm="Send these changes to {{ c.name }}'s profile for approval?" data-confirm-title="Request profile change" data-confirm-ok="Send for approval">
     {{ csrf() }}
     <div class="field"><label>Name</label><input value="{{ c.name }}" disabled></div>
     <div class="field"><label>PAN</label><input value="{{ c.pan }}" disabled></div>
@@ -16,7 +17,7 @@
     <div class="field"><label for="occupation">Occupation</label><input id="occupation" name="occupation" value="{{ c.occupation or '' }}"></div>
     <div class="field"><label for="risk_category">Risk category</label><select id="risk_category" name="risk_category">
       {% for r in ['Low', 'Medium', 'High'] %}<option {{ 'selected' if c.risk_category == r }}>{{ r }}</option>{% endfor %}</select></div>
-    <div class="full actions"><button class="btn primary" type="submit">Save changes</button>
+    <div class="full actions"><button class="btn primary" type="submit" {{ 'disabled' if pending }} data-busy="Sending…">Send for approval</button>
       <a class="btn ghost" href="{{ url_for('customers.profile', cid=c.id) }}">Cancel</a></div>
   </form>
 </div></div>

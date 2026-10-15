@@ -7,13 +7,14 @@
 {% if not customer %}{% include "_customer_picker.html" %}{% else %}
 <div class="card"><div class="card-body">
   <dl class="kv mb"><dt>Customer</dt><dd>{{ customer.name }} · <span class="mono">{{ customer.customer_code }}</span></dd></dl>
-  <form method="post" class="form-grid" data-confirm="Debit the funding account and submit this FD for approval?" data-confirm-ok="Book FD">
+  <form method="post" class="form-grid" data-confirm="Book an FD of {principal} for {tenure_months} for {{ customer.name }}? The amount is debited now from account {account_id} and the FD goes for approval (refunded if rejected)." data-confirm-ok="Book FD">
     {{ csrf() }}<input type="hidden" name="customer" value="{{ customer.id }}">
     <div class="field"><label for="account_id">Funding account</label><select id="account_id" name="account_id" required>
-      {% for a in customer.accounts if a.status == 'Active' %}<option value="{{ a.id }}">{{ a.account_number }} · {{ a.account_type }} · {{ a.balance|inr }}</option>{% endfor %}</select></div>
-    <div class="field"><label for="principal">Deposit amount (₹)</label><input id="principal" name="principal" type="number" min="1000" step="500" required></div>
+      {% for a in customer.accounts if a.status == 'Active' %}<option value="{{ a.id }}" {{ 'selected' if f.get('account_id') == a.id|string }}>{{ a.account_number }} · {{ a.account_type }} · {{ a.balance|inr }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="principal">Deposit amount (₹)</label><input id="principal" name="principal" type="number" min="1000" step="0.01" inputmode="decimal" data-money required value="{{ f.get('principal', '') }}">
+      <div class="hint">From ₹1,000, in rupees and paise.</div></div>
     <div class="field"><label for="tenure_months">Tenure</label><select id="tenure_months" name="tenure_months">
-      {% for m, r in rates.items() %}<option value="{{ m }}">{{ m }} months · {{ r }}% p.a.</option>{% endfor %}</select></div>
+      {% for m, r in rates.items() %}<option value="{{ m }}" {{ 'selected' if f.get('tenure_months') == m|string }}>{{ m }} months · {{ r }}% p.a.</option>{% endfor %}</select></div>
     <div class="full actions"><button class="btn primary">{{ icon('check', 'sm') }} Book FD</button>
       <a class="btn ghost" href="{{ url_for('customers.profile', cid=customer.id) }}">Cancel</a></div>
   </form>

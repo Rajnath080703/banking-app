@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+instance/
+__pycache__/
+*.pyc
+tests/.err.txt
+uidesign/
+migrations/__pycache__/

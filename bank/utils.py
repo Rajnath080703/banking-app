@@ -1,12 +1,31 @@
-import random
+import math
+import os
+import secrets
 import string
 from datetime import date, datetime, time, timedelta
 
 from flask import request
 
 
+TZ_OFFSET = timedelta(minutes=int(os.environ.get("BANK_TZ_OFFSET_MINUTES", "330")))
+
+
+def local_now():
+    return datetime.utcnow() + TZ_OFFSET
+
+
+def local_today():
+    """Today's date in the bank's time zone, independent of the server's own clock setting."""
+    return local_now().date()
+
+
+def to_local(dt):
+    return dt + TZ_OFFSET if dt else dt
+
+
 def gen_number(prefix, length=10):
-    return prefix + "".join(random.choices(string.digits, k=length))
+    # Cryptographic randomness: references must not be guessable from earlier ones.
+    return prefix + "".join(secrets.choice(string.digits) for _ in range(length))
 
 
 def unique_number(model, column, prefix, length=10):
@@ -17,18 +36,7 @@ def unique_number(model, column, prefix, length=10):
             return value
 
 
-def calc_emi(principal, annual_rate, months):
-    if months <= 0:
-        return 0
-    r = annual_rate / 12 / 100
-    if r == 0:
-        return round(principal / months, 2)
-    return round(principal * r * (1 + r) ** months / ((1 + r) ** months - 1), 2)
-
-
-def fd_maturity(principal, annual_rate, months):
-    # Quarterly compounding, as commonly used for term deposits.
-    return round(principal * (1 + annual_rate / 400) ** (months / 3), 2)
+from .money import emi as calc_emi, fd_maturity  # noqa: E402,F401  (Decimal implementations)
 
 
 def add_months(d, months):
@@ -43,7 +51,7 @@ def add_months(d, months):
 def date_range_from_request(default="month"):
     """Resolve Today / This Week / This Month / Custom into (start, end, key)."""
     key = request.args.get("range", default)
-    today = date.today()
+    today = local_today()
     if key == "today":
         start, end = today, today
     elif key == "week":
@@ -88,6 +96,7 @@ def compare_label(key):
 
 
 def pct_change(current, previous):
+    current, previous = float(current or 0), float(previous or 0)  # display percentage only
     if not previous:
         return None if not current else 100.0
     return round((current - previous) / previous * 100, 1)
@@ -108,8 +117,28 @@ def time_ago(value):
     return ""
 
 
+def _local_ts(column):
+    from sqlalchemy import literal_column
+    return column + literal_column(f"interval '{int(TZ_OFFSET.total_seconds() // 60)} minutes'")
+
+
+def sql_day(column, utc_timestamp=True):
+    """'YYYY-MM-DD' local-date bucket for GROUP BY (PostgreSQL)."""
+    from sqlalchemy import func, literal_column
+    # Inline literal so SELECT and GROUP BY are the identical expression for PostgreSQL.
+    return func.to_char(_local_ts(column) if utc_timestamp else column, literal_column("'YYYY-MM-DD'"))
+
+
+def sql_month(column, utc_timestamp=True):
+    """'YYYY-MM' local-month bucket for GROUP BY (PostgreSQL). Pass utc_timestamp=False for DATE columns."""
+    from sqlalchemy import func, literal_column
+    return func.to_char(_local_ts(column) if utc_timestamp else column, literal_column("'YYYY-MM'"))
+
+
 def day_bounds(start, end):
-    return datetime.combine(start, time.min), datetime.combine(end, time.max)
+    """UTC datetime bounds covering local dates start..end (timestamps are stored in UTC)."""
+    return (datetime.combine(start, time.min) - TZ_OFFSET,
+            datetime.combine(end, time.max) - TZ_OFFSET)
 
 
 def parse_date(value):
@@ -122,16 +151,26 @@ def parse_date(value):
 
 
 def parse_float(value, default=None):
+    """Parse a user-entered number. Rejects NaN / Infinity, which Python's float() accepts."""
     try:
-        return float(str(value).replace(",", ""))
+        v = float(str(value).replace(",", "").strip())
     except (TypeError, ValueError):
         return default
+    return v if math.isfinite(v) else default
+
+
+def parse_amount(value, minimum="0.01", maximum=None):
+    """Money from a form as Decimal (see money.parse_money). None if invalid."""
+    from .money import MAX_AMOUNT, D, parse_money
+    return parse_money(value, D(minimum), D(maximum) if maximum is not None else MAX_AMOUNT)
 
 
 def inr(value, decimals=0):
-    """Indian digit grouping: 12,34,56,789."""
+    """Indian digit grouping: 12,34,56,789. Exact for Decimal input (no float conversion)."""
+    from decimal import ROUND_HALF_UP, Decimal
     if value is None:
         return "—"
+    value = Decimal(str(value)).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
     negative = value < 0
     value = abs(value)
     whole = int(value)
@@ -152,6 +191,7 @@ def inr(value, decimals=0):
 def inr_short(value):
     if value is None:
         return "—"
+    value = float(value)  # display-only abbreviation (₹1.25 Cr); never used for arithmetic
     v = abs(value)
     sign = "-" if value < 0 else ""
     if v >= 1e7:
@@ -170,7 +210,7 @@ STATUS_TONES = {
     "assigned": "info", "in progress": "info", "open": "info", "overdue": "danger",
     "rejected": "danger", "expired": "danger", "late": "danger", "critical": "danger",
     "high": "danger", "medium": "warning", "low": "success", "failed": "danger",
-    "success": "success", "locked": "danger",
+    "success": "success", "locked": "danger", "frozen": "info", "reversed": "neutral", "superseded": "neutral",
 }
 
 

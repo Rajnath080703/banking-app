@@ -1,0 +1,20 @@
+{% extends "auth/layout.html" %}
+{% block title %}Set your password{% endblock %}
+{% block content %}
+{% if invalid %}
+<h1>Link not valid</h1>
+<p class="muted">This link has expired, was already used, or was replaced by a newer one. Ask your administrator to send a new link.</p>
+<p class="small mt"><a href="{{ url_for('auth.login') }}">← Back to sign in</a></p>
+{% else %}
+<h1>{{ 'Welcome' if purpose == 'invite' else 'Reset your password' }}</h1>
+<p class="muted">Set a password for <strong>{{ emp.email }}</strong>. Use at least 12 characters with upper- and lower-case letters, a digit and a symbol.</p>
+<div class="card">
+  <form method="post" autocomplete="off">
+    {{ csrf() }}
+    <div class="field"><label for="password">New password</label><input type="password" id="password" name="password" required minlength="12" autocomplete="new-password"></div>
+    <div class="field"><label for="confirm">Confirm password</label><input type="password" id="confirm" name="confirm" required minlength="12" autocomplete="new-password"></div>
+    <button class="btn primary block" type="submit" data-busy="Saving…">Set password</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

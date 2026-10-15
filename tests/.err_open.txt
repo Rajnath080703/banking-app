@@ -1,0 +1,7 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> e9dae407cd6e, initial schema
+INFO  [alembic.runtime.migration] Running upgrade e9dae407cd6e -> 61305e4a6b8d, integrity triggers, search index and least-privilege grants
+INFO  [alembic.runtime.migration] Running upgrade 61305e4a6b8d -> c363bc259fba, employee mfa replay step
+C:\Users\RajnathTamizhSelvan\OneDrive - ABOSS\Documents\banking software\tests\test_open_account.py:37: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  code = q(lambda: M.Customer.query.get(cid).customer_code)

@@ -19,13 +19,13 @@
       {% if account.status in ('Closed', 'Pending') %}
         <div class="notice warning">{{ icon('lock', 'sm') }} Transactions are not allowed on a {{ account.status|lower }} account.</div>
       {% else %}
-      <form method="post" class="form-grid" data-confirm="Post this transaction? This cannot be undone from this screen." data-confirm-title="Confirm transaction" data-confirm-ok="Post">
+      <form method="post" class="form-grid" data-confirm="{txn_type} of {amount} by {channel} on account {{ account.account_number }} ({{ account.customer.name }}). Current balance {{ account.balance|inr(2) }}. This cannot be undone from this screen." data-confirm-title="Confirm transaction" data-confirm-ok="Post">
         {{ csrf() }}
-        <div class="field"><label for="txn_type">Type</label><select id="txn_type" name="txn_type"><option value="Credit">Deposit (credit)</option><option value="Debit">Withdrawal (debit)</option></select></div>
-        <div class="field"><label for="amount">Amount (₹)</label><input id="amount" name="amount" type="number" step="0.01" min="1" required></div>
-        <div class="field"><label for="channel">Channel</label><select id="channel" name="channel">{% for c in ['Cash', 'Cheque', 'NEFT', 'IMPS', 'UPI', 'Transfer'] %}<option>{{ c }}</option>{% endfor %}</select></div>
-        <div class="field"><label for="description">Narration</label><input id="description" name="description" maxlength="200"></div>
-        <div class="full"><button class="btn primary">{{ icon('check', 'sm') }} Post transaction</button></div>
+        <div class="field"><label for="txn_type">Type</label><select id="txn_type" name="txn_type"><option value="Credit">Deposit (credit)</option><option value="Debit" {{ 'selected' if f.get('txn_type') == 'Debit' }}>Withdrawal (debit)</option></select></div>
+        <div class="field"><label for="amount">Amount (₹)</label><input id="amount" name="amount" type="number" step="0.01" min="0.01" inputmode="decimal" data-money required autofocus value="{{ f.get('amount', '') }}"></div>
+        <div class="field"><label for="channel">Channel</label><select id="channel" name="channel">{% for c in ['Cash', 'Cheque', 'NEFT', 'IMPS', 'UPI', 'Transfer'] %}<option {{ 'selected' if f.get('channel') == c }}>{{ c }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="description">Narration</label><input id="description" name="description" maxlength="200" value="{{ f.get('description', '') }}"></div>
+        <div class="full"><button class="btn primary" data-busy="Posting…">{{ icon('check', 'sm') }} Post transaction</button></div>
       </form>
       {% endif %}
     </div></div>

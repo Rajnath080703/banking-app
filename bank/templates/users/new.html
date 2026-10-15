@@ -6,7 +6,7 @@
 <form method="post" data-confirm="Create this employee with the selected role and permissions?" data-confirm-ok="Save">
   {{ csrf() }}<input type="hidden" name="perms_submitted" value="1">
   <div class="page-head">
-    {{ page_title('Add Employee & Permissions', url_for('users.index'), 'The employee signs in with their email and must change the temporary password at first sign-in.') }}
+    {{ page_title('Add Employee & Permissions', url_for('users.index'), 'The employee receives a one-time link to set their own password. No temporary passwords are created.') }}
     <div class="actions"><a class="btn" href="{{ url_for('users.index') }}">Cancel</a><button class="btn primary" type="submit">{{ icon('check', 'sm') }} Save</button></div>
   </div>
 
@@ -23,7 +23,6 @@
       <div class="field"><label for="branch_id">Branch</label><select id="branch_id" name="branch_id">
         {% for b in branches %}<option value="{{ b.id }}" {{ 'selected' if (f.get('branch_id')|string == b.id|string) or (not f.get('branch_id') and b.id == current_user.branch_id) }}>{{ b.name }}</option>{% endfor %}</select></div>
       <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="{{ f.get('phone', '') }}"></div>
-      <div class="field"><label for="password">Initial password <span class="muted">(optional)</span></label><input id="password" name="password" type="text" autocomplete="off" placeholder="Auto-generate"></div>
     </div>
   </div></div>
 

@@ -158,4 +158,20 @@
 </form>
 {%- endmacro %}
 
-{% macro csrf() -%}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{%- endmacro %}
+{% macro csrf() -%}<input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_idem" value="{{ form_nonce() }}">{%- endmacro %}
+
+{# Transaction status badges and the maker's "Reverse" action. Eligibility is re-checked on the server. #}
+{% macro txn_badges(t) -%}
+  {% if t.status == 'Reversed' %}{{ badge('Reversed', 'neutral') }}{% endif %}
+  {% if t.category == 'Reversal' %}{{ badge('Reversal', 'info') }}{% endif %}
+  {% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}
+{%- endmacro %}
+
+{% macro reverse_btn(t) -%}
+  {% if current_user.can('transactions', 'create') and t.status != 'Reversed' and t.category in ('Deposit', 'Withdrawal') %}
+  <form method="post" action="{{ url_for('transactions.reverse', tid=t.id) }}" class="reveal-form"
+        data-confirm="Request reversal of {{ t.txn_type|lower }} {{ t.txn_ref }} of {{ t.amount|inr(2) }} on account {{ t.account.account_number }} ({{ t.customer.name }})? A checker and a manager must approve it before anything changes."
+        data-confirm-title="Reverse transaction" data-confirm-tone="danger" data-confirm-ok="Send for approval" data-confirm-reason="Reason for the reversal (required)">
+    {{ csrf() }}<input type="hidden" name="reason" value=""><button class="btn sm ghost" type="submit">Reverse</button></form>
+  {% endif %}
+{%- endmacro %}

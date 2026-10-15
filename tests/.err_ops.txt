@@ -1,0 +1,5 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> e9dae407cd6e, initial schema
+INFO  [alembic.runtime.migration] Running upgrade e9dae407cd6e -> 61305e4a6b8d, integrity triggers, search index and least-privilege grants
+INFO  [alembic.runtime.migration] Running upgrade 61305e4a6b8d -> c363bc259fba, employee mfa replay step

@@ -43,38 +43,118 @@
   });
 
   // ---------------------------------------------------------------- confirmation dialogs
-  var pendingForm = null, pendingSubmitter = null;
+  // Forms with data-confirm ask first. data-confirm-reason adds a required reason box whose
+  // text is copied into the form's hidden "reason" field. Focus is trapped in the dialog and
+  // returned to the triggering button when it closes.
+  var pendingForm = null, pendingSubmitter = null, lastFocus = null;
   var modal = document.getElementById("confirm-modal");
-  function closeModal() { if (modal) modal.classList.add("hidden"); pendingForm = null; pendingSubmitter = null; }
+  var reasonWrap = modal && modal.querySelector("[data-confirm-reason-wrap]");
+  var reasonBox = modal && modal.querySelector("#confirm-reason");
+  var reasonErr = modal && modal.querySelector("[data-confirm-reason-error]");
+  function closeModal() {
+    if (modal) modal.classList.add("hidden");
+    pendingForm = null; pendingSubmitter = null;
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  // "{field}" in confirm text is replaced with what the employee entered, so the dialog states
+  // exactly what will happen ("Deposit of ₹5,000.00 to 5012…"). Selects show the chosen label;
+  // fields marked data-money are shown as rupees.
+  function fillIn(text, form) {
+    return (text || "").replace(/\{(\w+)\}/g, function (m, name) {
+      var el = form.elements[name];
+      if (!el) return m;
+      if (el.tagName === "SELECT") return el.options[el.selectedIndex] ? el.options[el.selectedIndex].text.trim() : "";
+      var v = (el.value || "").trim();
+      if (el.hasAttribute("data-money")) {
+        var n = Number(v);
+        return isFinite(n) && v !== "" ? "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "₹—";
+      }
+      return v || "—";
+    });
+  }
+  // A submit button may carry its own wording (data-confirm, -title, -ok, -tone, -reason),
+  // e.g. "Verify" and "Reject" on the same form.
+  function attr(form, submitter, name) {
+    return (submitter && submitter.hasAttribute(name)) ? submitter.getAttribute(name) : form.getAttribute(name);
+  }
   document.addEventListener("submit", function (e) {
     var form = e.target;
-    if (form.hasAttribute("data-confirm") && !form.dataset.confirmed && modal) {
+    var s = e.submitter || null;
+    var asks = form.hasAttribute("data-confirm") || (s && s.hasAttribute("data-confirm"));
+    if (asks && !form.dataset.confirmed && modal) {
       e.preventDefault();
       pendingForm = form;
-      pendingSubmitter = e.submitter || null;
-      modal.querySelector("[data-confirm-title]").textContent = form.getAttribute("data-confirm-title") || "Please confirm";
-      modal.querySelector("[data-confirm-text]").textContent = form.getAttribute("data-confirm");
+      pendingSubmitter = s;
+      lastFocus = s || document.activeElement;
+      modal.querySelector("[data-confirm-title]").textContent = attr(form, s, "data-confirm-title") || "Please confirm";
+      modal.querySelector("[data-confirm-text]").textContent = fillIn(attr(form, s, "data-confirm"), form);
+      var reasonLabel = attr(form, s, "data-confirm-reason");
+      var needsReason = !!reasonLabel;
+      form.dataset.needsReason = needsReason ? "1" : "";
+      reasonWrap.classList.toggle("hidden", !needsReason);
+      reasonErr.classList.add("hidden");
+      var remarksBox = document.getElementById("remarks");  // start from remarks already typed on the page
+      reasonBox.value = needsReason && remarksBox ? remarksBox.value : "";
+      if (needsReason) modal.querySelector("[data-confirm-reason-label]").textContent = reasonLabel;
       var ok = modal.querySelector("[data-confirm-ok]");
-      ok.className = "btn " + (form.getAttribute("data-confirm-tone") || "primary");
-      ok.textContent = form.getAttribute("data-confirm-ok") || "Confirm";
+      ok.className = "btn " + (attr(form, s, "data-confirm-tone") || "primary");
+      ok.textContent = attr(form, s, "data-confirm-ok") || "Confirm";
       modal.classList.remove("hidden");
-      ok.focus();
+      (needsReason ? reasonBox : ok).focus();
     }
   }, true);
   if (modal) {
     modal.querySelector("[data-confirm-ok]").addEventListener("click", function () {
-      if (pendingForm) {
-        var f = pendingForm, s = pendingSubmitter;
-        f.dataset.confirmed = "1";
-        closeModal();
-        if (!f.requestSubmit) f.submit();
-        else if (s) f.requestSubmit(s);
-        else f.requestSubmit();
+      if (!pendingForm) return;
+      var f = pendingForm, s = pendingSubmitter;
+      if (f.dataset.needsReason) {
+        var text = reasonBox.value.trim();
+        if (!text) { reasonErr.classList.remove("hidden"); reasonBox.focus(); return; }
+        var hidden = f.querySelector('input[name="reason"]') || f.querySelector('[name="remarks"]');
+        if (hidden) hidden.value = text;
       }
+      f.dataset.confirmed = "1";
+      modal.classList.add("hidden");
+      pendingForm = null; pendingSubmitter = null;
+      if (!f.requestSubmit) f.submit();
+      else if (s) f.requestSubmit(s);
+      else f.requestSubmit();
     });
     modal.querySelectorAll("[data-confirm-cancel]").forEach(function (b) { b.addEventListener("click", closeModal); });
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+    document.addEventListener("keydown", function (e) {
+      if (modal.classList.contains("hidden")) return;
+      if (e.key === "Escape") { closeModal(); return; }
+      if (e.key === "Tab") {  // keep keyboard focus inside the dialog
+        var items = Array.prototype.filter.call(modal.querySelectorAll("button, textarea"), function (el) {
+          return el.offsetParent !== null; });
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
   }
+
+  // ---------------------------------------------------------------- busy state on submit
+  // After a form is really submitted, disable its buttons and show progress so it cannot be sent
+  // twice from the page (the server also rejects duplicates with one-time form tokens).
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (e.defaultPrevented || (form.hasAttribute("data-confirm") && !form.dataset.confirmed)) return;
+    if ((form.getAttribute("method") || "get").toLowerCase() !== "post") return;
+    setTimeout(function () {
+      form.querySelectorAll('button[type="submit"], button:not([type])').forEach(function (btn) {
+        if (e.submitter && btn === e.submitter && btn.name) {  // keep the clicked button's value
+          var h = document.createElement("input"); h.type = "hidden"; h.name = btn.name; h.value = btn.value; form.appendChild(h);
+        }
+        btn.disabled = true;
+        btn.setAttribute("aria-busy", "true");
+        if (btn.hasAttribute("data-busy")) btn.textContent = btn.getAttribute("data-busy");
+      });
+    }, 0);
+  });
+  document.querySelectorAll("[data-select-all]").forEach(function (el) {
+    el.addEventListener("focus", function () { el.select(); });
+  });
 
   // ---------------------------------------------------------------- misc behaviours
   document.querySelectorAll("[data-width]").forEach(function (el) {

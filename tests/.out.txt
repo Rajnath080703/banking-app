@@ -1,0 +1,27 @@
+[PASS] Account form explains that KYC must be verified first :: 
+[PASS] Server refuses an account request without verified KYC :: 0
+[PASS] Approval refused if KYC lapsed while the request waited :: ('Reviewed', 'Pending')
+[PASS] Rejecting a KYC document requires a reason :: 
+[PASS] A 'next' value in the form cannot redirect off-site :: /kyc/doc/4
+[PASS] After verifying, the employee goes to the next pending document :: /kyc/doc/4
+[PASS] A decided document cannot be decided again :: 
+[PASS] Verify and Reject each name the document and customer in their confirmation :: 
+[PASS] FD accepts any amount from ₹1,000 in rupees and paise (₹20,250.50) :: 20250.50
+[PASS] Menu shows how many approvals wait for this employee :: 2 / 2
+[PASS] Menu shows KYC documents waiting for verification :: 1
+[PASS] Maker sees no approval count for their own requests :: 
+[PASS] Approvals open on 'Awaiting me' for a checker :: 
+[PASS] After a decision the checker goes to the next request :: /approvals/4
+[PASS] When the queue is empty the checker is told so :: 
+[PASS] Approve dialog names the request and its summary :: 
+[PASS] Rejection still needs remarks on the server :: 
+[PASS] Exact account number opens Customer 360 on the accounts tab :: /customers/1?tab=accounts
+[PASS] Exact loan number opens the loan :: /loans/1
+[PASS] A single name match opens Customer 360 :: 302
+[PASS] Several matches still show the result list :: 
+[PASS] Direct hits respect permissions (clerk without loan access gets no loan redirect) :: 200
+[PASS] Officer sees the amount due and who can collect it :: 
+[PASS] Repayment dialog states amount, mode, customer and loan :: 
+[PASS] Transaction dialog states type, amount, channel, account and customer :: 
+
+ux workflows: 25/25 passed

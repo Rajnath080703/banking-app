@@ -60,3 +60,11 @@ def mask(value, visible=4):
     if len(value) <= visible:
         return "*" * len(value)
     return "•" * (len(value) - visible) + value[-visible:]
+
+
+def encrypt_bytes(data: bytes) -> bytes:
+    return _fernet.encrypt(data)
+
+
+def decrypt_bytes(token: bytes) -> bytes:
+    return _fernet.decrypt(token)  # raises InvalidToken if the file was altered

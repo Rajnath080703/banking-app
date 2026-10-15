@@ -10,14 +10,25 @@
 <div class="grid g-2">
   <div class="card"><div class="card-head"><h2>Request details</h2></div><div class="card-body">
     <dl class="kv">
-      <dt>Customer</dt><dd>{% if r.customer %}{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=r.customer_id) }}">{{ r.customer.name }}</a>{% else %}{{ r.customer.name }}{% endif %} · <span class="mono">{{ r.customer.customer_code }}</span>{% endif %}</dd>
+      {% if r.customer %}<dt>Customer</dt><dd>{% if r.customer %}{% if current_user.can('customer_profile') %}<a href="{{ url_for('customers.profile', cid=r.customer_id) }}">{{ r.customer.name }}</a>{% else %}{{ r.customer.name }}{% endif %} · <span class="mono">{{ r.customer.customer_code }}</span>{% endif %}</dd>{% endif %}
       <dt>Branch</dt><dd>{{ r.branch.name if r.branch else '—' }}</dd>
       {% if r.amount %}<dt>Amount</dt><dd><strong>{{ r.amount|inr }}</strong></dd>{% endif %}
-      <dt>Reference</dt><dd>{% if r.ref_type == 'loan' %}<a href="{{ url_for('loans.detail', lid=r.ref_id) }}">View loan</a>{% else %}{{ r.ref_type }} #{{ r.ref_id }}{% endif %}</dd>
+      <dt>Reference</dt><dd>{% if r.ref_type == 'loan' %}<a href="{{ url_for('loans.detail', lid=r.ref_id) }}">View loan</a>
+        {% elif r.ref_type == 'transaction' and r.customer_id %}<a href="{{ url_for('customers.profile', cid=r.customer_id, tab='transactions') }}">View transactions in Customer 360</a>
+        {% elif r.ref_type in ('account', 'fd', 'customer') and r.customer_id %}<a href="{{ url_for('customers.profile', cid=r.customer_id, tab='deposits' if r.ref_type == 'fd' else 'accounts') }}">View in Customer 360</a>
+        {% elif r.ref_type == 'role' %}<a href="{{ url_for('users.role_edit', rid=r.ref_id) }}">View role</a>
+        {% elif r.ref_type == 'interest' %}<a href="{{ url_for('accounting.interest', start=r.payload.start, end=r.payload.end) }}">View interest preview</a>
+        {% else %}—{% endif %}</dd>
       <dt>Maker</dt><dd>{{ r.maker.name }} ({{ r.maker.role.name }})</dd>
       <dt>Checker</dt><dd>{{ r.checker.name if r.checker else '—' }}{% if r.checker_remarks %}<div class="small muted">“{{ r.checker_remarks }}”</div>{% endif %}</dd>
       <dt>Decision</dt><dd>{{ r.approver.name if r.approver and r.status in ('Approved', 'Rejected') else '—' }}{% if r.approver_remarks %}<div class="small muted">“{{ r.approver_remarks }}”</div>{% endif %}</dd>
-      {% for k, v in r.payload.items() if k != 'funding_account_id' %}<dt>{{ k|replace('_', ' ')|capitalize }}</dt><dd>{{ v }}</dd>{% endfor %}
+      {% set p = r.payload %}
+      {% if p.changes is mapping %}
+        {% for field, value in p.changes.items() %}<dt>New {{ field|replace('_', ' ') }}</dt><dd><strong>{{ value or '(blank)' }}</strong></dd>{% endfor %}
+      {% elif p.changes %}
+        <dt>Permission changes</dt><dd class="small mono">{{ p.changes|join(', ') }}</dd>
+      {% endif %}
+      {% for k, v in p.items() if k not in ('funding_account_id', 'changes', 'grants', 'branch_ids') %}<dt>{{ k|replace('_', ' ')|capitalize }}</dt><dd>{{ v }}</dd>{% endfor %}
     </dl>
   </div></div>
 
@@ -29,17 +40,17 @@
       </form>
       <div class="actions">
         {% if can_review %}
-          <form method="post" data-confirm="Mark this request as reviewed and forward it to the branch manager?" data-confirm-title="Checker review" data-confirm-ok="Forward">
+          <form method="post" data-confirm="Forward {{ r.request_number }} for final approval? {{ r.summary }}" data-confirm-title="Checker review" data-confirm-ok="Forward">
             {{ csrf() }}<input type="hidden" name="action" value="review"><input type="hidden" name="remarks" data-copy-remarks>
             <button class="btn primary">{{ icon('eye', 'sm') }} Review & forward</button></form>
         {% endif %}
         {% if can_decide %}
-          <form method="post" data-confirm="Approve and execute this request? This action will be audit-logged." data-confirm-title="Final approval" data-confirm-tone="success" data-confirm-ok="Approve">
+          <form method="post" data-confirm="Approve {{ r.request_number }}? {{ r.summary }}. It takes effect immediately and is audit-logged." data-confirm-title="Final approval" data-confirm-tone="success" data-confirm-ok="Approve">
             {{ csrf() }}<input type="hidden" name="action" value="approve"><input type="hidden" name="remarks" data-copy-remarks>
             <button class="btn success">{{ icon('check', 'sm') }} Approve</button></form>
         {% endif %}
         {% if can_reject %}
-          <form method="post" data-confirm="Reject this request?" data-confirm-title="Reject request" data-confirm-tone="danger" data-confirm-ok="Reject">
+          <form method="post" data-confirm="Reject {{ r.request_number }}? {{ r.summary }}" data-confirm-title="Reject request" data-confirm-tone="danger" data-confirm-ok="Reject" data-confirm-reason="Reason for rejecting (required)">
             {{ csrf() }}<input type="hidden" name="action" value="reject"><input type="hidden" name="remarks" data-copy-remarks>
             <button class="btn danger">{{ icon('x', 'sm') }} Reject</button></form>
         {% endif %}

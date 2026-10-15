@@ -1,9 +1,34 @@
-{# Shown when a create form is opened without a customer selected. #}
-{% from "macros.html" import icon %}
-<div class="card"><div class="card-body">
-  <form method="get" class="filters">
-    <input type="search" name="ref" placeholder="Customer ID (CIF…) or account number" required autofocus aria-label="Customer reference">
-    <button class="btn primary">{{ icon('search', 'sm') }} Select customer</button>
+{# Shown when a create form is opened without a customer selected: search, then pick. #}
+{% from "macros.html" import icon, badge %}
+{% set results = g.get('picker_results') %}
+{% set term = g.get('picker_term', '') %}
+<div class="card mb"><div class="card-head"><h2>1. Find the customer</h2></div><div class="card-body">
+  <form method="get" class="filters" role="search">
+    {% for k, v in request.args.items() if k not in ('find', 'ref', 'customer') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <input type="search" name="find" value="{{ term }}" placeholder="Name, mobile, PAN, customer ID or account number" required autofocus
+           minlength="3" maxlength="80" aria-label="Find customer">
+    <button class="btn primary">{{ icon('search', 'sm') }} Search</button>
   </form>
-  <p class="small muted mt">Enter the exact customer ID or account number.{% if current_user.can('customer_profile') %} Or <a href="{{ url_for('customers.search') }}">search Customer 360</a> and use the action buttons there.{% endif %}</p>
+  <p class="small muted mt">Names match partially (3 letters or more); mobile, PAN, customer ID and account number match exactly.
+    Only customers of {{ 'all branches' if current_user.sees_all_branches else 'your branch' }} are shown.</p>
 </div></div>
+{% if term %}
+<div class="card"><div class="card-head"><h2>2. Select the customer <span class="sub">· {{ results|length }} found{{ ' (first 15)' if results|length == 15 }}</span></h2></div>
+  <div class="card-body flush table-wrap">
+  {% if results %}
+    <table class="table">
+      <thead><tr><th>Customer</th><th>Customer ID</th><th>Mobile</th><th>Branch</th><th>KYC</th><th></th></tr></thead>
+      <tbody>{% for c in results %}
+        <tr><td class="primary-cell">{{ c.name }}<div class="sub-cell">{{ c.city or '' }}</div></td><td class="mono">{{ c.customer_code }}</td>
+          <td class="mono">{{ c.mobile_masked }}</td><td>{{ c.branch.name }}</td><td>{{ badge(c.kyc_status) }}</td>
+          <td class="right"><a class="btn sm primary" href="{{ request.path }}?{{ dict(request.args.items(), customer=c.id)|reject_keys('find', 'ref')|urlencode }}">Select</a></td></tr>
+      {% endfor %}</tbody>
+    </table>
+  {% elif term|length < 3 %}
+    <div class="empty"><p>Type at least 3 letters of the name, or the full mobile number, PAN, customer ID or account number.</p></div>
+  {% else %}
+    <div class="empty"><p>No customer matches “{{ term }}”.{% if current_user.can('customer_profile', 'create') %}
+      If this is a new customer, <a href="{{ url_for('customers.new') }}">register them first</a>.{% endif %}</p></div>
+  {% endif %}
+  </div></div>
+{% endif %}

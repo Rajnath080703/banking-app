@@ -1,15 +1,18 @@
 import io
 from datetime import datetime
+from decimal import Decimal
 
 from flask import Blueprint, abort, render_template, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
-from ..extensions import db
+from ..extensions import db, limiter
+from ..money import q2
 from ..models import (Account, ApprovalRequest, AuditLog, Branch, Customer, Document, Employee,
                       FixedDeposit, Loan, LoanRepayment, Ticket, Transaction)
 from ..security import audit, require_perm
-from ..utils import date_range_from_request, day_bounds
+from ..utils import date_range_from_request, day_bounds, sql_day, sql_month, to_local
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
 
@@ -22,12 +25,27 @@ def _branches():
 
 
 def _money(v):
-    return round(v or 0, 2)
+    return q2(v or 0)
+
+
+FORMULA_PREFIXES = ("=", "+", "-", "@", chr(9), chr(13))
+
+
+def safe_cell(v):
+    """Neutralise spreadsheet formula injection: text that starts like a formula
+    (=, +, -, @) from customer-entered fields is exported as plain text."""
+    if isinstance(v, str) and v.startswith(FORMULA_PREFIXES):
+        return "'" + v
+    return v
+
+
+def _export_key():
+    return f"export:{current_user.get_id().split(':')[0]}" if current_user.is_authenticated else "anon"
 
 
 def r_daily_txn(start, end, br):
     s, e = day_bounds(start, end)
-    day = func.date(Transaction.timestamp)
+    day = sql_day(Transaction.timestamp)
     rows = (db.session.query(day, func.count(),
                              func.sum(db.case((Transaction.txn_type == "Credit", Transaction.amount), else_=0)),
                              func.sum(db.case((Transaction.txn_type == "Debit", Transaction.amount), else_=0)))
@@ -39,7 +57,7 @@ def r_daily_txn(start, end, br):
 
 def r_monthly_txn(start, end, br):
     s, e = day_bounds(start, end)
-    m = func.strftime("%Y-%m", Transaction.timestamp)
+    m = sql_month(Transaction.timestamp)
     rows = (db.session.query(m, func.count(),
                              func.sum(db.case((Transaction.txn_type == "Credit", Transaction.amount), else_=0)),
                              func.sum(db.case((Transaction.txn_type == "Debit", Transaction.amount), else_=0)))
@@ -51,17 +69,19 @@ def r_monthly_txn(start, end, br):
 
 def _txn_list(start, end, br, ttype):
     s, e = day_bounds(start, end)
-    rows = (Transaction.query.filter(Transaction.branch_id.in_(br), Transaction.txn_type == ttype,
+    rows = (Transaction.query.options(joinedload(Transaction.account), joinedload(Transaction.customer))
+            .filter(Transaction.branch_id.in_(br), Transaction.txn_type == ttype,
                                      Transaction.timestamp.between(s, e))
             .order_by(Transaction.timestamp.desc()).limit(5000).all())
     return (["Date", "Reference", "Account", "Customer", "Channel", "Category", "Amount (₹)"],
-            [[t.timestamp.strftime("%Y-%m-%d %H:%M"), t.txn_ref, t.account.account_number, t.customer.name,
+            [[to_local(t.timestamp).strftime("%Y-%m-%d %H:%M"), t.txn_ref, t.account.account_number, t.customer.name,
               t.channel, t.category, _money(t.amount)] for t in rows])
 
 
 def r_deposits(start, end, br):
     cols, rows = _txn_list(start, end, br, "Credit")
-    fds = FixedDeposit.query.filter(FixedDeposit.branch_id.in_(br), FixedDeposit.start_date.between(start, end)).all()
+    fds = (FixedDeposit.query.options(joinedload(FixedDeposit.customer))
+           .filter(FixedDeposit.branch_id.in_(br), FixedDeposit.start_date.between(start, end)).all())
     rows += [[fd.start_date.isoformat(), fd.fd_number, "FD", fd.customer.name, "Transfer",
               f"FD {fd.tenure_months}m @ {fd.interest_rate}%", _money(fd.principal)] for fd in fds]
     return cols, sorted(rows, key=lambda r: r[0], reverse=True)
@@ -72,14 +92,14 @@ def r_withdrawals(start, end, br):
 
 
 def r_loans(start, end, br):
-    rows = Loan.query.filter(Loan.branch_id.in_(br)).order_by(Loan.created_at.desc()).all()
+    rows = Loan.query.options(joinedload(Loan.customer)).filter(Loan.branch_id.in_(br)).order_by(Loan.created_at.desc()).all()
     return (["Loan No", "Customer", "Type", "Amount (₹)", "Outstanding (₹)", "Rate %", "EMI (₹)", "Status", "Disbursed"],
             [[l.loan_number, l.customer.name, l.type_label, _money(l.amount), _money(l.outstanding),
               l.interest_rate, _money(l.emi), l.status, l.disbursed_on.isoformat() if l.disbursed_on else ""] for l in rows])
 
 
 def r_collections(start, end, br):
-    rows = (LoanRepayment.query.join(Loan).filter(Loan.branch_id.in_(br), LoanRepayment.paid_on.between(start, end))
+    rows = (LoanRepayment.query.options(joinedload(LoanRepayment.loan).joinedload(Loan.customer)).join(Loan).filter(Loan.branch_id.in_(br), LoanRepayment.paid_on.between(start, end))
             .order_by(LoanRepayment.paid_on.desc()).all())
     return (["Paid On", "Loan No", "Customer", "Type", "Amount (₹)", "Principal (₹)", "Interest (₹)", "Mode", "Status"],
             [[r.paid_on.isoformat(), r.loan.loan_number, r.loan.customer.name, r.loan.type_label, _money(r.amount),
@@ -87,7 +107,7 @@ def r_collections(start, end, br):
 
 
 def r_overdue(start, end, br):
-    rows = Loan.query.filter(Loan.branch_id.in_(br), Loan.status == "Overdue").order_by(Loan.overdue_days.desc()).all()
+    rows = Loan.query.options(joinedload(Loan.customer)).filter(Loan.branch_id.in_(br), Loan.status == "Overdue").order_by(Loan.overdue_days.desc()).all()
     return (["Loan No", "Customer", "Type", "Outstanding (₹)", "EMI (₹)", "Due Date", "Days Overdue", "Bucket"],
             [[l.loan_number, l.customer.name, l.type_label, _money(l.outstanding), _money(l.emi),
               l.next_due_date.isoformat() if l.next_due_date else "", l.overdue_days,
@@ -96,34 +116,36 @@ def r_overdue(start, end, br):
 
 
 def r_new_accounts(start, end, br):
-    rows = Account.query.filter(Account.branch_id.in_(br), Account.opened_on.between(start, end)).order_by(Account.opened_on.desc()).all()
+    rows = Account.query.options(joinedload(Account.customer)).filter(Account.branch_id.in_(br), Account.opened_on.between(start, end)).order_by(Account.opened_on.desc()).all()
     return (["Opened", "Account No", "Customer", "Type", "Status", "Balance (₹)"],
             [[a.opened_on.isoformat(), a.account_number, a.customer.name, a.account_type, a.status, _money(a.balance)] for a in rows])
 
 
 def r_closed_accounts(start, end, br):
-    rows = Account.query.filter(Account.branch_id.in_(br), Account.status == "Closed",
+    rows = Account.query.options(joinedload(Account.customer)).filter(Account.branch_id.in_(br), Account.status == "Closed",
                                 Account.closed_on.between(start, end)).order_by(Account.closed_on.desc()).all()
     return (["Closed", "Account No", "Customer", "Type", "Opened"],
             [[a.closed_on.isoformat(), a.account_number, a.customer.name, a.account_type, a.opened_on.isoformat()] for a in rows])
 
 
 def r_kyc(start, end, br):
-    rows = Customer.query.filter(Customer.branch_id.in_(br)).order_by(Customer.kyc_status, Customer.name).all()
-    out = []
-    for c in rows:
-        docs = c.documents.filter_by(category="KYC").all()
-        nxt = min([d.expiry_date for d in docs if d.expiry_date], default=None)
-        out.append([c.customer_code, c.name, c.kyc_status, len(docs),
-                    sum(1 for d in docs if d.status == "Verified"), nxt.isoformat() if nxt else ""])
-    return ["Customer ID", "Name", "KYC Status", "Documents", "Verified", "Next Expiry"], out
+    docs = (db.session.query(Document.customer_id, func.count(Document.id),
+                             func.count(Document.id).filter(Document.status == "Verified"),
+                             func.min(Document.expiry_date))
+            .filter(Document.category == "KYC").group_by(Document.customer_id).subquery())
+    rows = (db.session.query(Customer.customer_code, Customer.name, Customer.kyc_status,
+                             docs.c[1], docs.c[2], docs.c[3])
+            .outerjoin(docs, docs.c.customer_id == Customer.id)
+            .filter(Customer.branch_id.in_(br)).order_by(Customer.kyc_status, Customer.name).all())
+    return (["Customer ID", "Name", "KYC Status", "Documents", "Verified", "Next Expiry"],
+            [[code, name, st, n or 0, v or 0, nxt.isoformat() if nxt else ""] for code, name, st, n, v, nxt in rows])
 
 
 def r_tickets(start, end, br):
     s, e = day_bounds(start, end)
-    rows = Ticket.query.filter(Ticket.branch_id.in_(br), Ticket.created_at.between(s, e)).order_by(Ticket.created_at.desc()).all()
+    rows = Ticket.query.options(joinedload(Ticket.customer), joinedload(Ticket.assignee)).filter(Ticket.branch_id.in_(br), Ticket.created_at.between(s, e)).order_by(Ticket.created_at.desc()).all()
     return (["Ticket", "Created", "Customer", "Subject", "Category", "Priority", "Status", "Assigned To"],
-            [[t.ticket_number, t.created_at.strftime("%Y-%m-%d"), t.customer.name, t.subject, t.category, t.priority,
+            [[t.ticket_number, to_local(t.created_at).strftime("%Y-%m-%d"), t.customer.name, t.subject, t.category, t.priority,
               t.status, t.assignee.name if t.assignee else ""] for t in rows])
 
 
@@ -144,10 +166,11 @@ def r_branch(start, end, br):
 
 def r_approvals(start, end, br):
     s, e = day_bounds(start, end)
-    rows = ApprovalRequest.query.filter(ApprovalRequest.branch_id.in_(br), ApprovalRequest.created_at.between(s, e)) \
+    rows = ApprovalRequest.query.options(joinedload(ApprovalRequest.maker), joinedload(ApprovalRequest.checker),
+                                         joinedload(ApprovalRequest.approver)).filter(ApprovalRequest.branch_id.in_(br), ApprovalRequest.created_at.between(s, e)) \
         .order_by(ApprovalRequest.created_at.desc()).all()
     return (["Request", "Created", "Type", "Summary", "Maker", "Checker", "Approver", "Status"],
-            [[r.request_number, r.created_at.strftime("%Y-%m-%d"), r.type_label, r.summary, r.maker.name,
+            [[r.request_number, to_local(r.created_at).strftime("%Y-%m-%d"), r.type_label, r.summary, r.maker.name,
               r.checker.name if r.checker else "", r.approver.name if r.approver else "", r.status] for r in rows])
 
 
@@ -158,7 +181,7 @@ def r_audit(start, end, br):
         q = q.join(Employee, AuditLog.employee_id == Employee.id).filter(Employee.branch_id.in_(br))
     rows = q.order_by(AuditLog.timestamp.desc()).limit(5000).all()
     return (["Timestamp", "User", "Action", "Module", "Reference", "Details", "IP"],
-            [[a.timestamp.strftime("%Y-%m-%d %H:%M:%S"), a.email or "", a.action, a.module or "", a.reference or "",
+            [[to_local(a.timestamp).strftime("%Y-%m-%d %H:%M:%S"), a.email or "", a.action, a.module or "", a.reference or "",
               a.details or "", a.ip_address or ""] for a in rows])
 
 
@@ -192,6 +215,7 @@ def index():
 @bp.route("/<key>")
 @login_required
 @require_perm("reports", "view")
+@limiter.limit("30 per hour", key_func=_export_key, exempt_when=lambda: not request.args.get("export"))
 def view(key):
     if key not in REPORTS:
         abort(404)
@@ -202,8 +226,21 @@ def view(key):
     cols, rows = fn(start, end, _branches())
     fmt = request.args.get("export")
     if fmt:
-        if not current_user.can("reports", "export"):
+        if fmt not in ("xlsx", "pdf"):
+            abort(400)
+        if not current_user.can("reports", "export") or not current_user.can(module, "view"):
+            audit("Report export denied", "reports", key, fmt, result="denied")
+            db.session.commit()
             abort(403)
+        from ..models import Setting
+        cap = Setting.get_int("max_export_rows")
+        if len(rows) > cap:
+            audit("Report export refused (too large)", "reports", key, f"{len(rows)} rows > {cap}", result="denied")
+            db.session.commit()
+            from flask import flash, redirect, url_for
+            flash(f"This export has {len(rows):,} rows, above the {cap:,}-row limit for bulk extraction. "
+                  f"Narrow the date range or branch and try again.", "warning")
+            return redirect(url_for("reports.view", key=key, **{k: v for k, v in request.args.items() if k != "export"}))
         audit("Report exported", "reports", key, f"{fmt} {start}..{end} rows={len(rows)}")
         db.session.commit()
         return _export(fmt, key, title, cols, rows, start, end)
@@ -231,7 +268,7 @@ def _export(fmt, key, title, cols, rows, start, end):
             cell.fill = PatternFill("solid", fgColor="1E3A8A")
             cell.alignment = Alignment(horizontal="center")
         for r in rows:
-            ws.append(list(r))
+            ws.append([safe_cell(v) for v in r])
         for i, col in enumerate(cols, 1):
             width = max([len(str(col))] + [len(str(r[i - 1])) for r in rows[:300]]) + 2
             ws.column_dimensions[ws.cell(row=4, column=i).column_letter].width = min(width, 45)
@@ -255,7 +292,7 @@ def _export(fmt, key, title, cols, rows, start, end):
         head = cell.clone("head", textColor=colors.white, fontName="Helvetica-Bold")
         clean = lambda v: str(v).replace("₹", "Rs.").replace("&", "&amp;").replace("<", "&lt;")  # noqa: E731
         data = [[Paragraph(clean(c), head) for c in cols]]
-        data += [[Paragraph(clean(f"{v:,.2f}" if isinstance(v, float) else v), cell) for v in r] for r in rows[:3000]]
+        data += [[Paragraph(clean(f"{v:,.2f}" if isinstance(v, (float, Decimal)) else v), cell) for v in r] for r in rows[:3000]]
         table = Table(data, repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
