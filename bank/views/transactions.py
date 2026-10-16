@@ -1,12 +1,18 @@
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+import io
+from datetime import datetime
+from html import escape
+
+from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import Account, Customer, Transaction
+from ..models import Account, AuditLog, Branch, Customer, Employee, Setting, Transaction
+from ..money import amount_in_words
+from ..private_search import term as search_term
 from ..security import activity, audit, branch_scope, ensure_branch_access, once_per_form, require_perm
 from ..services import (TransferError, create_approval, needs_large_txn_approval, pending_request,
                         post_transaction, reversal_problem, search_customers, transfer_funds, transfer_problem)
-from ..utils import date_range_from_request, day_bounds, parse_amount, inr
+from ..utils import date_range_from_request, day_bounds, parse_amount, inr, to_local
 
 bp = Blueprint("transactions", __name__, url_prefix="/transactions")
 
@@ -20,7 +26,7 @@ def index():
     q = branch_scope(Transaction.query, Transaction).filter(Transaction.timestamp.between(s, e))
     ttype = request.args.get("type", "")
     channel = request.args.get("channel", "")
-    term = request.args.get("q", "").strip()
+    term = search_term()
     if ttype:
         q = q.filter(Transaction.txn_type == ttype)
     if channel:
@@ -93,8 +99,9 @@ def new():
         if txn.flagged:
             msg += " It was flagged by a risk rule and routed for review."
         flash(msg, "warning" if txn.flagged else "success")
-        return redirect(url_for("transactions.new", account=account.account_number))
-    return render_template("transactions/new.html", account=account, acc_no=acc_no, recent=_recent(account), f={})
+        return redirect(url_for("transactions.new", account=account.account_number, receipt=txn.id))
+    return render_template("transactions/new.html", account=account, acc_no=acc_no, recent=_recent(account), f={},
+                           receipts=_receipts_from_request())
 
 
 def _recent(account):
@@ -157,7 +164,7 @@ def transfer():
 
     def show(f=None):
         return render_template("transactions/transfer.html", src=src, dst=dst, from_no=from_no, to_no=to_no,
-                               missing=missing, f=f or {})
+                               missing=missing, f=f or {}, receipts=_receipts_from_request())
 
     if request.method == "POST":
         amount = parse_amount(request.form.get("amount"))
@@ -187,5 +194,69 @@ def transfer():
         flash(f"Transferred {inr(amount, 2)} from {src.account_number} to {dst.account_number} "
               f"({out.txn_ref} / {into.txn_ref}). New balances {inr(src.balance, 2)} and {inr(dst.balance, 2)}.",
               "warning" if (out.flagged or into.flagged) else "success")
-        return redirect(url_for("transactions.transfer", **{"from": src.account_number, "to": dst.account_number}))
+        return redirect(url_for("transactions.transfer", receipt=[out.id, into.id],
+                                **{"from": src.account_number, "to": dst.account_number}))
     return show()
+
+
+def _receipts_from_request():
+    """Transactions just posted (?receipt=<id>, repeated for a transfer) that the employee may print."""
+    if not current_user.can("transactions", "print"):
+        return []
+    txns = [db.session.get(Transaction, i) for i in request.args.getlist("receipt", type=int)[:2]]
+    return [t for t in txns if t and (current_user.sees_all_branches or t.branch_id == current_user.branch_id)]
+
+
+@bp.route("/<int:tid>/receipt")
+@login_required
+@require_perm("transactions", "print")
+def receipt(tid):
+    """Counter receipt (A5 PDF) for one transaction. Every print is audited; reprints say DUPLICATE."""
+    txn = ensure_branch_access(db.session.get(Transaction, tid))
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A5
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    copies = AuditLog.query.filter_by(action="Receipt printed", reference=txn.txn_ref).count()
+    branch, acc = db.session.get(Branch, txn.branch_id), txn.account
+    teller = db.session.get(Employee, txn.created_by) if txn.created_by else None
+    rs = lambda v: inr(v, 2).replace("₹", "Rs. ")  # noqa: E731 — Indian grouping; base fonts have no ₹ glyph
+    cash = txn.channel == "Cash"
+    kind = {"Deposit": "Cash deposit" if cash else "Deposit", "Withdrawal": "Cash withdrawal" if cash else "Withdrawal"}.get(
+        txn.category, f"{txn.category or 'Transaction'} ({'credit' if txn.txn_type == 'Credit' else 'debit'})")
+    styles = getSampleStyleSheet()
+    small = styles["BodyText"].clone("small", fontSize=7.5, leading=9.5, textColor=colors.HexColor("#475569"))
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A5, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
+                            bottomMargin=12 * mm, title=f"Receipt {txn.txn_ref}")
+    story = [Paragraph(escape(Setting.get("bank_name")), styles["Title"]),
+             Paragraph(f"{escape(branch.name)} ({escape(branch.code)}) &nbsp;·&nbsp; Transaction receipt", styles["Normal"]),
+             Spacer(1, 4 * mm)]
+    if copies:
+        story.append(Paragraph(f"<b>DUPLICATE</b> &nbsp;(copy {copies + 1})", styles["Heading4"]))
+    if txn.status == "Reversed":
+        story.append(Paragraph("<b>REVERSED</b> — this transaction was later reversed.", styles["Heading4"]))
+    rows = [("Transaction", kind), ("Reference", txn.txn_ref),
+            ("Date & time", to_local(txn.timestamp).strftime("%d %b %Y, %I:%M %p")),
+            ("Customer", f"{txn.customer.name} ({txn.customer.customer_code})"),
+            ("Account", f"{acc.account_type} · XXXX{acc.account_number[-4:]}"), ("Channel", txn.channel or "—"),
+            ("Narration", (txn.description or "—")[:80]), ("Amount", rs(txn.amount)),
+            ("In words", amount_in_words(txn.amount)), ("Balance after", rs(txn.balance_after or 0)),
+            ("Posted by", f"{teller.name} ({teller.employee_code})" if teller else "System")]
+    table = Table([[k, Paragraph(escape(str(v)), styles["BodyText"])] for k, v in rows], colWidths=[30 * mm, 94 * mm])
+    table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9), ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475569")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
+        ("BACKGROUND", (0, 7), (-1, 7), colors.HexColor("#EEF4FF")), ("FONTNAME", (0, 7), (0, 7), "Helvetica-Bold"),
+    ]))
+    story += [table, Spacer(1, 6 * mm),
+              Paragraph(f"Printed {datetime.now():%d %b %Y %H:%M} by {escape(current_user.name)}. "
+                        "This is a computer-generated receipt and does not require a signature. "
+                        "Please check the amount before leaving the counter.", small)]
+    doc.build(story)
+    buf.seek(0)
+    audit("Receipt printed", "transactions", txn.txn_ref, f"copy {copies + 1}")
+    db.session.commit()
+    return send_file(buf, mimetype="application/pdf", download_name=f"receipt_{txn.txn_ref}.pdf")

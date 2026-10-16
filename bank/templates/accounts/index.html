@@ -12,9 +12,9 @@
   <div class="card-head">
     <div class="seg">
       {% for s in ['', 'Active', 'Inactive', 'Dormant', 'Frozen', 'Pending', 'Closed', 'Rejected'] %}
-        <a href="{{ url_for('accounts.index', status=s, type=acc_type, q=term) }}" class="{{ 'on' if status == s }}">{{ s or 'All' }}</a>{% endfor %}
+        <a href="{{ url_for('accounts.index', status=s, type=acc_type, **qarg(term)) }}" class="{{ 'on' if status == s }}">{{ s or 'All' }}</a>{% endfor %}
     </div>
-    <form method="get" class="filters">
+    <form method="post" class="filters"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
       <input type="hidden" name="status" value="{{ status }}">
       <select name="type" data-autosubmit aria-label="Account type"><option value="">All types</option>
         {% for t in ['Savings', 'Current'] %}<option {{ 'selected' if acc_type == t }}>{{ t }}</option>{% endfor %}</select>

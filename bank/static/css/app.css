@@ -443,6 +443,8 @@ textarea { min-height: 84px; resize: vertical; }
 
 .notice { display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--info-soft); color: var(--info); font-size: 13px; }
 .notice.warning { background: var(--warning-soft); color: var(--warning); }
+.notice.success { background: var(--success-soft); color: var(--success); align-items: center; flex-wrap: wrap; }
+.notice .push { margin-left: auto; display: flex; gap: 8px; }
 .divider { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 .report-card { display: flex; gap: 14px; align-items: flex-start; padding: 16px; color: var(--text); }
 .report-card:hover { text-decoration: none; border-color: var(--primary); }

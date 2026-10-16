@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, empty, crumbs, pager, txn_badges, reverse_btn with context %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, txn_badges, reverse_btn, receipt_btn with context %}
 {% block title %}Transactions{% endblock %}
 {% block content %}
 {{ crumbs([('Transactions', None)]) }}
@@ -15,7 +15,7 @@
 </div>
 <div class="card">
   <div class="card-head">
-    <form method="get" class="filters">
+    <form method="post" class="filters"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
       <select name="range" data-range-select>{% for k, label in [('today','Today'),('week','This Week'),('month','This Month'),('year','This Year'),('custom','Custom Range')] %}<option value="{{ k }}" {{ 'selected' if rkey == k }}>{{ label }}</option>{% endfor %}</select>
       <input type="date" name="start" value="{{ start.isoformat() }}" data-custom-range><input type="date" name="end" value="{{ end.isoformat() }}" data-custom-range>
       <select name="type" data-autosubmit><option value="">Credit & debit</option>{% for t in ['Credit', 'Debit'] %}<option {{ 'selected' if ttype == t }}>{{ t }}</option>{% endfor %}</select>
@@ -33,7 +33,7 @@
         <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
           <td>{{ t.customer.name }}</td><td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
           <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
-          <td class="num muted">{{ t.balance_after|inr(2) }}</td><td class="right nowrap">{{ txn_badges(t) }} {{ reverse_btn(t) }}</td></tr>
+          <td class="num muted">{{ t.balance_after|inr(2) }}</td><td class="right nowrap">{{ txn_badges(t) }} {{ receipt_btn(t) }} {{ reverse_btn(t) }}</td></tr>
       {% endfor %}</tbody>
     </table>
     {% else %}{{ empty('No transactions in this period.', 'swap') }}{% endif %}

@@ -106,3 +106,47 @@ def allocate_payment(amount, penalty_due, interest_due, principal_due):
         parts.append(take)
         remaining -= take
     return parts[0], parts[1], parts[2], remaining
+
+
+_ONES = ("", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+         "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen")
+_TENS = ("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+
+
+def _words_below_1000(n: int) -> str:
+    parts = []
+    if n >= 100:
+        parts.append(f"{_ONES[n // 100]} Hundred")
+        n %= 100
+    if n >= 20:
+        parts.append(_TENS[n // 10] + (f" {_ONES[n % 10]}" if n % 10 else ""))
+    elif n:
+        parts.append(_ONES[n])
+    return " ".join(parts)
+
+
+def _words(n: int) -> str:
+    """Whole number in the Indian system (crore, lakh, thousand), e.g. 1,25,000 -> One Lakh Twenty Five Thousand."""
+    if n == 0:
+        return "Zero"
+    parts = []
+    if n >= 10_000_000:
+        parts.append(f"{_words(n // 10_000_000)} Crore")
+        n %= 10_000_000
+    for size, name in ((100_000, "Lakh"), (1_000, "Thousand")):
+        if n >= size:
+            parts.append(f"{_words_below_1000(n // size)} {name}")
+            n %= size
+    if n:
+        parts.append(_words_below_1000(n))
+    return " ".join(parts)
+
+
+def amount_in_words(value) -> str:
+    """Amount as written on a receipt or cheque: 1250.50 -> 'Rupees One Thousand Two Hundred Fifty and Fifty Paise Only'."""
+    amount = q2(value)
+    rupees, paise = int(amount), int((amount - int(amount)) * 100)
+    text = f"Rupees {_words(rupees)}"
+    if paise:
+        text += f" and {_words_below_1000(paise)} Paise"
+    return text + " Only"

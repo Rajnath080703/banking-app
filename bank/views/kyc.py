@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from .. import storage, workqueue
 from ..extensions import db
 from ..models import DOC_TYPES, Customer, Document, DocumentVerification, Loan, Setting
+from ..private_search import term as search_term
 from ..security import once_per_form, customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
 from ..utils import parse_date, local_today
 
@@ -68,7 +69,7 @@ def index():
     else:
         view = "pending"
         q = q.filter(Document.status == "Pending").order_by(Document.uploaded_at)
-    term = request.args.get("q", "").strip()
+    term = search_term()
     if term:
         from ..services import search_customers
         q = q.filter(Document.customer_id.in_(search_customers(term, Customer.query).with_entities(Customer.id)))

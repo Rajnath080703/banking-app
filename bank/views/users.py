@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..mailer import send_mail
 from ..models import ACTIONS, MODULES, Branch, Employee, LoginHistory, Permission, Role
+from ..private_search import term as search_term
 from ..security import audit, once_per_form, require_perm
 from ..services import apply_role_grants, create_approval, pending_request
 from .auth import issue_invite
@@ -76,7 +77,7 @@ def _scoped_employees():
 @require_perm("user_management", "view")
 def index():
     q = _scoped_employees()
-    term = request.args.get("q", "").strip()
+    term = search_term()
     role_id = request.args.get("role", type=int)
     if term:
         q = q.filter(db.or_(Employee.name.ilike(f"%{term}%"), Employee.email.ilike(f"%{term}%")))

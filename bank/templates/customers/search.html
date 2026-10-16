@@ -11,7 +11,7 @@
 </div>
 
 <div class="card mb"><div class="card-body">
-  <form method="get" class="filters">
+  <form method="post" class="filters"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
     <input type="search" name="q" value="{{ q }}" placeholder="Account no / CIF / name / mobile / PAN" autofocus aria-label="Search customers">
     <button class="btn primary" type="submit">{{ icon('search', 'sm') }} Search</button>
     {% if q %}<a class="btn ghost" href="{{ url_for('customers.search') }}">Clear</a>{% endif %}

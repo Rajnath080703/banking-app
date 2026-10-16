@@ -10,6 +10,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..models import (Account, Activity, ApprovalRequest, Branch, Customer, Document,
                       FixedDeposit, Loan, LoanRepayment, Setting, Ticket, Transaction)
+from ..private_search import term as search_term
 from ..security import (activity, audit, branch_scope, can_view_sensitive, ensure_branch_access,
                         once_per_form, require_perm)
 from ..services import money_sum, search_customers
@@ -99,7 +100,7 @@ def attention_items(c):
 @login_required
 @require_perm("customer_profile", "view")
 def search():
-    q = request.args.get("q", "").strip()
+    q = search_term()
     page = request.args.get("page", 1, type=int)
     base = branch_scope(Customer.query, Customer)
     if q:
@@ -386,7 +387,7 @@ def global_search():
     """Global search across modules — every section respects the employee's permissions."""
     if not any(current_user.can(m) for m in ("customer_profile", "customer_accounts", "loans")):
         abort(403)
-    q = request.args.get("q", "").strip()[:80]
+    q = search_term()[:80]
     results = {"customers": [], "accounts": [], "loans": []}
     if q:
         if current_user.can("customer_profile"):

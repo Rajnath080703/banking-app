@@ -185,6 +185,9 @@ def create_app(test_config=None):
                 return redirect(url_for("settings.mfa_setup"))
         return None
 
+    from . import private_search
+    app.before_request(private_search.redirect_posted_search)  # after security_gate's CSRF check
+
     @app.after_request
     def security_headers(resp):
         h = resp.headers
@@ -242,6 +245,8 @@ def create_app(test_config=None):
     app.jinja_env.filters["cell"] = cell
     app.jinja_env.filters["reject_keys"] = lambda d, *keys: {k: v for k, v in d.items() if k not in keys}
     app.jinja_env.globals["RANGE_LABELS"] = RANGE_LABELS
+    app.jinja_env.globals["search_term"] = private_search.term
+    app.jinja_env.globals["qarg"] = private_search.args_for  # url_for(..., **qarg(term)): term as a token
     # Timestamps are stored in UTC and shown in the bank's local time (IST by default).
     app.jinja_env.filters["dt"] = (lambda v, f="%d %b %Y, %I:%M %p": (v + TZ_OFFSET).strftime(f) if v else "—")
     app.jinja_env.filters["d"] = lambda v, f="%d %b %Y": v.strftime(f) if v else "—"

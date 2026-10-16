@@ -167,6 +167,16 @@
   {% if t.flagged %}{{ badge('Flagged', 'danger') }}{% endif %}
 {%- endmacro %}
 
+{% macro receipt_btn(t) -%}
+  {% if current_user.can('transactions', 'print') %}<a class="btn sm ghost" href="{{ url_for('transactions.receipt', tid=t.id) }}" target="_blank" rel="noopener" title="Print receipt for {{ t.txn_ref }}" aria-label="Print receipt for {{ t.txn_ref }}">{{ icon('file', 'sm') }}</a>{% endif %}
+{%- endmacro %}
+
+{# Shown after posting: one button per new transaction (a transfer has two). #}
+{% macro receipt_notice(receipts) -%}
+  {% if receipts %}<div class="notice success mb">{{ icon('check', 'sm') }}<span>Posted. Print the receipt for the customer.</span>
+    <span class="push">{% for t in receipts %}<a class="btn sm primary" href="{{ url_for('transactions.receipt', tid=t.id) }}" target="_blank" rel="noopener">{{ icon('file', 'sm') }} {{ 'Receipt' if receipts|length == 1 else ('Debit receipt' if t.txn_type == 'Debit' else 'Credit receipt') }} · {{ t.txn_ref }}</a>{% endfor %}</span></div>{% endif %}
+{%- endmacro %}
+
 {% macro reverse_btn(t) -%}
   {% if current_user.can('transactions', 'create') and t.status != 'Reversed' and t.category in ('Deposit', 'Withdrawal') %}
   <form method="post" action="{{ url_for('transactions.reverse', tid=t.id) }}" class="reveal-form"

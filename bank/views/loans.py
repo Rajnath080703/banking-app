@@ -7,6 +7,7 @@ from sqlalchemy import func
 from ..extensions import db
 from ..models import LOAN_TYPE_LABELS, Account, ApprovalRequest, Customer, Loan, LoanRepayment
 from ..money import D, ZERO, parse_money, parse_rate, q2
+from ..private_search import term as search_term
 from ..security import activity, audit, branch_scope, customer_from_request, ensure_branch_access, once_per_form, require_perm
 from ..services import (RepaymentError, create_approval, loan_dues, money_sum, pending_request, repay_loan,
                         search_customers)
@@ -31,7 +32,7 @@ def _loan_list(loan_type=None, template="loans/index.html", **extra):
     status = request.args.get("status", "all")
     if status != "all":
         q = q.filter(Loan.status == status)
-    term = request.args.get("q", "").strip()
+    term = search_term()
     if term:
         ids = search_customers(term, Customer.query).with_entities(Customer.id)
         q = q.filter(db.or_(Loan.customer_id.in_(ids), Loan.loan_number == term.upper()))
@@ -79,7 +80,7 @@ def by_type(loan_type):
 @login_required
 @require_perm("loans", "view")
 def gold():
-    term = request.args.get("q", "").strip()
+    term = search_term()
     gold_stats = branch_scope(Loan.query, Loan).filter(
         Loan.loan_type == "gold", Loan.status.in_(["Active", "Overdue"])).with_entities(
         func.coalesce(func.sum(Loan.gold_weight_grams), 0), func.count()).one()

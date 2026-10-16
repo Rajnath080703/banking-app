@@ -8,6 +8,7 @@ from ..extensions import db
 from ..models import Account, Customer, FixedDeposit
 from ..security import once_per_form, customer_from_request, branch_scope, ensure_branch_access, require_perm
 from ..ledger import TERM_DEPOSITS
+from ..private_search import term as search_term
 from ..services import create_approval, pending_request, post_transaction, premature_quote, search_customers
 from ..utils import add_months, fd_maturity, parse_amount, unique_number, local_today, inr
 
@@ -22,7 +23,7 @@ FD_RATES = {6: Decimal("6.00"), 12: Decimal("6.80"), 24: Decimal("7.00"), 36: De
 def index():
     q = branch_scope(FixedDeposit.query, FixedDeposit)
     status = request.args.get("status", "")
-    term = request.args.get("q", "").strip()
+    term = search_term()
     if status:
         q = q.filter(FixedDeposit.status == status)
     if term:

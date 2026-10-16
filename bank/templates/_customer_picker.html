@@ -3,8 +3,8 @@
 {% set results = g.get('picker_results') %}
 {% set term = g.get('picker_term', '') %}
 <div class="card mb"><div class="card-head"><h2>1. Find the customer</h2></div><div class="card-body">
-  <form method="get" class="filters" role="search">
-    {% for k, v in request.args.items() if k not in ('find', 'ref', 'customer') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <form method="post" class="filters" role="search"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="find">
+    {% for k, v in request.args.items() if k not in ('find', 'fs', 'ref', 'customer') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
     <input type="search" name="find" value="{{ term }}" placeholder="Name, mobile, PAN, customer ID or account number" required autofocus
            minlength="3" maxlength="80" aria-label="Find customer">
     <button class="btn primary">{{ icon('search', 'sm') }} Search</button>
@@ -21,7 +21,7 @@
       <tbody>{% for c in results %}
         <tr><td class="primary-cell">{{ c.name }}<div class="sub-cell">{{ c.city or '' }}</div></td><td class="mono">{{ c.customer_code }}</td>
           <td class="mono">{{ c.mobile_masked }}</td><td>{{ c.branch.name }}</td><td>{{ badge(c.kyc_status) }}</td>
-          <td class="right"><a class="btn sm primary" href="{{ request.path }}?{{ dict(request.args.items(), customer=c.id)|reject_keys('find', 'ref')|urlencode }}">Select</a></td></tr>
+          <td class="right"><a class="btn sm primary" href="{{ request.path }}?{{ dict(request.args.items(), customer=c.id)|reject_keys('find', 'fs', 'ref')|urlencode }}">Select</a></td></tr>
       {% endfor %}</tbody>
     </table>
   {% elif term|length < 3 %}

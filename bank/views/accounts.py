@@ -3,6 +3,7 @@ from flask_login import login_required
 
 from ..extensions import db
 from ..models import Account, ApprovalRequest, Customer
+from ..private_search import term as search_term
 from ..security import once_per_form, customer_from_request, audit, branch_scope, ensure_branch_access, require_perm
 from ..services import (ACCOUNT_TYPES, account_open_problem, closure_problem, create_approval, lock, pending_request,
                         search_customers)
@@ -18,7 +19,7 @@ def index():
     q = branch_scope(Account.query, Account).join(Customer)
     status = request.args.get("status", "")
     acc_type = request.args.get("type", "")
-    term = request.args.get("q", "").strip()
+    term = search_term()
     if status:
         q = q.filter(Account.status == status)
     if acc_type:

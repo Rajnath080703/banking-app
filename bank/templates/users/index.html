@@ -11,7 +11,7 @@
   </div></div>
 <div class="card">
   <div class="card-head">
-    <form method="get" class="filters">
+    <form method="post" class="filters"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
       <input type="search" name="q" value="{{ term }}" placeholder="Name or email">
       <select name="role" data-autosubmit><option value="">All roles</option>{% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if role_id == r.id }}>{{ r.name }}</option>{% endfor %}</select>
       <button class="btn">{{ icon('search', 'sm') }}</button>

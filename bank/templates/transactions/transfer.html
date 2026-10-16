@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, crumbs, csrf with context %}
+{% from "macros.html" import icon, badge, crumbs, csrf, receipt_notice with context %}
 {% block title %}Transfer between accounts{% endblock %}
 {% block content %}
 {{ crumbs([('Transactions', url_for('transactions.index')), ('Transfer', None)]) }}
 <div class="page-head"><div><h1>Transfer between accounts</h1>
   <p>Moves money between two accounts in this bank in one step. Both accounts must be in {{ 'any branch' if current_user.sees_all_branches else 'your branch' }}.</p></div></div>
 
+{{ receipt_notice(receipts) }}
 <div class="card mb"><div class="card-head"><h2>1. Load the accounts</h2></div><div class="card-body">
   <form method="get" class="filters">
     <input id="from" type="search" name="from" value="{{ from_no }}" placeholder="From account number" required inputmode="numeric" maxlength="20" aria-label="From account number">

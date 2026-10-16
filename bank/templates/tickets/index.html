@@ -8,11 +8,11 @@
 <div class="card">
   <div class="card-head">
     <div class="seg">
-      <a href="{{ url_for('tickets.index', q=term) }}" class="{{ 'on' if not status and not request.args.get('mine') }}">All<span class="n">{{ counts.values()|sum }}</span></a>
-      {% for s in statuses %}<a href="{{ url_for('tickets.index', status=s, q=term) }}" class="{{ 'on' if status == s }}">{{ s }}<span class="n">{{ counts.get(s, 0) }}</span></a>{% endfor %}
+      <a href="{{ url_for('tickets.index', **qarg(term)) }}" class="{{ 'on' if not status and not request.args.get('mine') }}">All<span class="n">{{ counts.values()|sum }}</span></a>
+      {% for s in statuses %}<a href="{{ url_for('tickets.index', status=s, **qarg(term)) }}" class="{{ 'on' if status == s }}">{{ s }}<span class="n">{{ counts.get(s, 0) }}</span></a>{% endfor %}
       <a href="{{ url_for('tickets.index', mine=1) }}" class="{{ 'on' if request.args.get('mine') }}">Assigned to me</a>
     </div>
-    <form method="get" class="filters"><input type="hidden" name="status" value="{{ status }}">
+    <form method="post" class="filters"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q"><input type="hidden" name="status" value="{{ status }}">
       <input type="search" name="q" value="{{ term }}" placeholder="Ticket no / customer"><button class="btn">{{ icon('search', 'sm') }}</button></form>
   </div>
   <div class="card-body flush table-wrap">

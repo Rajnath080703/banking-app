@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf, page_title, txn_badges, reverse_btn with context %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf, page_title, txn_badges, reverse_btn, receipt_btn with context %}
 {% block title %}{{ c.name }} · Customer 360{% endblock %}
 
 {% macro accounts_table(accounts) %}
@@ -189,7 +189,7 @@
         <tr><td class="nowrap">{{ t.timestamp|dt }}</td><td class="mono">{{ t.txn_ref }}</td><td class="mono">{{ t.account.account_number }}</td>
           <td>{{ t.description }}<div class="sub-cell">{{ t.category }}</div></td><td>{{ t.channel }}</td>
           <td class="num neg">{{ t.amount|inr(2) if t.txn_type == 'Debit' }}</td><td class="num pos">{{ t.amount|inr(2) if t.txn_type == 'Credit' }}</td>
-          <td class="right nowrap">{{ txn_badges(t) }} {{ reverse_btn(t) }}</td></tr>
+          <td class="right nowrap">{{ txn_badges(t) }} {{ receipt_btn(t) }} {{ reverse_btn(t) }}</td></tr>
       {% endfor %}</tbody>
     </table>
     {% else %}{{ empty('No transactions.', 'swap') }}{% endif %}

@@ -11,7 +11,7 @@
     {% endfor %}
   </nav>
   {% endif %}
-  <form method="get" class="toolbar">
+  <form method="post" class="toolbar"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
     <div class="field"><label for="status">Status</label>
       <select id="status" name="status" data-autosubmit>
         {% for key, label in filters %}<option value="{{ key }}" {{ 'selected' if status == key }}>{{ label }} ({{ counts.get(key, 0) }})</option>{% endfor %}

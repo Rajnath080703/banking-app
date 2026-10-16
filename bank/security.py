@@ -60,7 +60,8 @@ def customer_from_request():
     cid = request.values.get("customer", type=int)
     if cid:
         return ensure_branch_access(db.session.get(Customer, cid))
-    term = request.args.get("find", "").strip()[:80]
+    from .private_search import term as search_term
+    term = search_term("find")
     if term:
         from .services import search_customers
         g.picker_term = term

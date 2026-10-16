@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf, receipt_btn, receipt_notice with context %}
 {% block title %}Post transaction{% endblock %}
 {% block content %}
 {{ crumbs([('Transactions', url_for('transactions.index')), ('Post transaction', None)]) }}
 <div class="page-head"><div><h1>Cash deposit / withdrawal</h1><p>Every transaction is screened by the configured fraud & risk rules.</p></div></div>
+{{ receipt_notice(receipts) }}
 <div class="card mb"><div class="card-body">
   <form method="get" class="filters">
     <input type="search" name="account" value="{{ acc_no }}" placeholder="Enter account number" required autofocus>
@@ -33,7 +34,8 @@
     <div class="card-body flush table-wrap">
       {% if recent %}<table class="table"><tbody>{% for t in recent %}
         <tr><td class="nowrap small">{{ t.timestamp|dt }}</td><td>{{ t.description }}</td>
-          <td class="num {{ 'pos' if t.txn_type == 'Credit' else 'neg' }}">{{ '+' if t.txn_type == 'Credit' else '−' }}{{ t.amount|inr(2) }}</td></tr>{% endfor %}
+          <td class="num {{ 'pos' if t.txn_type == 'Credit' else 'neg' }}">{{ '+' if t.txn_type == 'Credit' else '−' }}{{ t.amount|inr(2) }}</td>
+          <td class="right">{{ receipt_btn(t) }}</td></tr>{% endfor %}
       </tbody></table>{% else %}{{ empty('No transactions yet.', 'swap') }}{% endif %}
     </div></div>
 </div>

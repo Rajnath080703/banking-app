@@ -71,9 +71,9 @@
   <div class="main">
     <header class="topbar">
       <button class="icon-btn menu-btn" data-toggle-nav aria-label="Open menu">{{ icon('menu') }}</button>
-      <form class="search-global" action="{{ url_for('customers.global_search') }}" method="get" role="search">
+      <form class="search-global" action="{{ url_for('customers.global_search') }}" method="post" role="search"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q">
         {{ icon('search') }}
-        <input type="search" name="q" placeholder="Search account no, customer ID, name, mobile, PAN, loan no…" value="{{ request.args.get('q', '') if ep == 'customers.global_search' }}" aria-label="Global search">
+        <input type="search" name="q" placeholder="Search account no, customer ID, name, mobile, PAN, loan no…" value="{{ search_term() if ep == 'customers.global_search' }}" aria-label="Global search">
       </form>
       <div class="spacer"></div>
       {% block topbar_extra %}{% endblock %}

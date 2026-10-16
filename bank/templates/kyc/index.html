@@ -11,10 +11,10 @@
 <div class="card">
   <nav class="tabs in-card" aria-label="KYC views">
     {% for key, label, n in [('pending', 'Pending', counts.pending), ('expiring', 'Expiring', counts.expiring), ('verified', 'Verified', None), ('expired', 'Expired', counts.expired), ('all', 'All', None)] %}
-      <a href="{{ url_for('kyc.index', view=key, q=term) }}" class="{{ 'on' if view == key }}">{{ label }}{% if n is not none %} <span class="n">({{ n }})</span>{% endif %}</a>
+      <a href="{{ url_for('kyc.index', view=key, **qarg(term)) }}" class="{{ 'on' if view == key }}">{{ label }}{% if n is not none %} <span class="n">({{ n }})</span>{% endif %}</a>
     {% endfor %}
   </nav>
-  <form method="get" class="toolbar"><input type="hidden" name="view" value="{{ view }}">
+  <form method="post" class="toolbar"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="_search" value="q"><input type="hidden" name="view" value="{{ view }}">
     <div class="grow-search">{{ icon('search', 'sm') }}<input type="search" name="q" value="{{ term }}" placeholder="Search by Account No. / Customer ID / Name / PAN" aria-label="Search KYC"></div>
     <button class="btn primary">Search</button>
     {% if term %}<a class="btn ghost" href="{{ url_for('kyc.index', view=view) }}">Clear</a>{% endif %}

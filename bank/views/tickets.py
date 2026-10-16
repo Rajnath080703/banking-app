@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import TICKET_STATUSES, Customer, Employee, Ticket, TicketNote
+from ..private_search import term as search_term
 from ..security import once_per_form, customer_from_request, activity, audit, branch_scope, ensure_branch_access, require_perm
 from ..services import search_customers
 from ..utils import unique_number
@@ -20,7 +21,7 @@ CATEGORIES = ["Cards", "Charges", "Profile", "Services", "Digital", "Loans", "De
 def index():
     q = branch_scope(Ticket.query, Ticket)
     status = request.args.get("status", "")
-    term = request.args.get("q", "").strip()
+    term = search_term()
     counts = dict(q.with_entities(Ticket.status, func.count()).group_by(Ticket.status).all())
     if status:
         q = q.filter(Ticket.status == status)
