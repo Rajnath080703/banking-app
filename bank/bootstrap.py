@@ -59,7 +59,8 @@ def prepare_database(owner_url: str | None = None, app_password: str | None = No
             GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO bank_app;
             GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bank_app;
             REVOKE UPDATE, DELETE, TRUNCATE ON journal_entry, journal_line, loan_repayment,
-                activity, login_history, document_verification, audit_log, transaction FROM bank_app;
+                activity, login_history, document_verification, audit_log, transaction, interest_tds FROM bank_app;
+            GRANT UPDATE (txn_id) ON interest_tds TO bank_app;
             GRANT UPDATE (prev_hash, row_hash) ON audit_log TO bank_app;
             GRANT UPDATE (flagged, journal_entry_id, status) ON transaction TO bank_app;
             REVOKE ALL ON alembic_version FROM bank_app;

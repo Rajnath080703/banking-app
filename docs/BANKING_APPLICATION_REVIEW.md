@@ -420,3 +420,61 @@ the KYC block, checker + manager approval and the Clerk's missing button.
 **Not added:** extra account fields (nominee, mode of operation, initial deposit). The account
 model has none; adding them would need new business rules and a migration, so it is left as a
 product decision.
+
+---
+
+## Addendum — upgrade batches 1 and 2 (16 October 2026)
+
+Plan: employee-experience and banking-feature upgrades, built in batches on `dev` and checked on
+dev.bank before merging to `main`.
+
+### Batch 1 — receipts and private search
+
+| Change | Detail | Test |
+|---|---|---|
+| Printable receipts | After a deposit, withdrawal or transfer the page offers an A5 PDF receipt (two for a transfer); every transaction row has a receipt button. Amount in words (Indian numbering), masked account, teller, balance after. Needs the transactions *print* permission and branch access; each print is audited and reprints are marked DUPLICATE. | `test_receipts_search.py` |
+| Private search | Search boxes POST the term; the app redirects to the same page with an encrypted 12-hour token (`s=`, `fs=` in the customer picker) that only the same employee can open. PAN, mobile numbers and names no longer appear in URLs, browser history, server logs or Referer headers. Filters are kept; old `?q=` links still work. | same (29 checks) |
+
+The Clerk role has no *print* permission, so clerks see no receipt button. An administrator can
+grant it in User Management → Roles if front-desk staff should print receipts.
+
+### Batch 2 — fees & charges, TDS on FD interest
+
+**Fees & charges** (`bank/charges.py`, Transactions → Fees & Charges):
+- Fee schedule: flat or percentage (with min/max) plus GST. Starter fees are placeholders
+  (cheque book ₹100, duplicate statement ₹50, demand draft 0.25% min ₹25 max ₹5,000, minimum
+  balance ₹100 below ₹1,000), editable under Fees → Fee schedule (Settings edit permission, audited).
+- Ledger: the fee goes to GL 4200 (fee income) and GST to GL 2300 (GST payable).
+- A service fee the balance cannot cover is recorded as **Due**, with no ledger entry and the balance
+  never negative. It is collected automatically from the next credit that covers it.
+- The monthly minimum-balance charge runs from the scheduled scan, once per month and account
+  (enforced by a unique key). Only Active savings accounts open for the whole month are charged.
+  It is **Skipped**, never Due, when the balance cannot cover it: RBI rules say the charge must not
+  make the balance negative.
+- Waivers are maker-checker requests. Approving one refunds a charged fee (reversing both GL legs)
+  or cancels a due fee.
+
+**TDS on FD interest:**
+- Deducted when FD interest is paid (maturity or premature closure). Savings interest is not
+  subject to TDS for banks.
+- Per customer and financial year (April–March): once the year's FD interest passes the threshold
+  (₹50,000; ₹1,00,000 for senior citizens, 60+ by 31 March), the TDS rate (10% with a valid PAN,
+  20% without) applies to the whole year's interest, less tax already deducted that year.
+- No TDS while a Form 15G/15H is on file for that year. This is recorded through the maker-checker
+  customer change request.
+- The deduction is a separate "TDS" debit on the account, credited to GL 2400 (TDS payable).
+  Each payout is recorded in `interest_tds`, which the runtime role can only insert into (no
+  update or delete, except linking the transaction).
+- New reports: Fees & Charges, and TDS on FD Interest (PAN masked).
+- Rates and thresholds are in Settings. **Confirm them with your auditor.** The defaults are the
+  bank-deposit thresholds in force from 1 April 2025 (former section 194A). The Income-tax Act,
+  2025 applies from 1 April 2026, so check the current section references and rates.
+
+**Known limitations:**
+- TDS is worked out when interest is paid, not on yearly accrual of a multi-year FD.
+- No Form 16A certificate and no 26Q export file yet; the TDS report is the source for filing.
+- The minimum-balance charge is flat, not proportional to the shortfall (RBI asks for charges
+  proportional to the shortfall); a slab structure can be added if your bank uses one.
+
+Database: migration `d8c2e156bea7` adds `fee_type`, `fee_charge`, `interest_tds` and
+`customer.tds_exempt_fy`. It runs automatically on deploy (`flask prepare-db`).

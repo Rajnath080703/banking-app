@@ -23,6 +23,7 @@ SUITES = [
     ("Account opening (both entry points)", "test_open_account.py", "bankdb_t_open"),
     ("Dev sample-data loader", "test_demo_seed.py", "bankdb_t_demo"),
     ("Receipts & private search", "test_receipts_search.py", "bankdb_t_rcpt"),
+    ("Fees, charges & TDS", "test_fees_tds.py", "bankdb_t_fees"),
     ("Rate limits", "test_rate_limits.py", "bankdb_t_rl"),
 ]
 if "--perf" in sys.argv:

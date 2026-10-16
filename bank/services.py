@@ -40,6 +40,7 @@ APPROVAL_MODULE = {
     "fund_transfer": "transactions",
     "interest_posting": "interest",
     "role_permissions": "user_management",
+    "fee_waiver": "transactions",
 }
 # Some decisions need a more senior final approver than the default.
 FINAL_LEVEL_BY_TYPE = {"role_permissions": 90, "interest_posting": 90}
@@ -318,7 +319,7 @@ def _exec_account_unfreeze(req, approved):
     activity(acc.customer_id, "Account unfrozen", acc.account_number, req.payload.get("reason", ""))
 
 
-CUSTOMER_EDITABLE = ("mobile", "email", "address", "city", "occupation", "risk_category")
+CUSTOMER_EDITABLE = ("mobile", "email", "address", "city", "occupation", "risk_category", "tds_exempt_fy")
 
 
 def _exec_customer_update(req, approved):
@@ -378,7 +379,13 @@ _HANDLERS = {
     "customer_update": _exec_customer_update, "fd_create": _exec_fd_create, "fd_close": _exec_fd_close,
     "interest_posting": _exec_interest_posting, "role_permissions": _exec_role_permissions,
     "txn_reversal": _exec_txn_reversal,
+    "fee_waiver": lambda req, approved: _charges().exec_fee_waiver(req, approved),
 }
+
+
+def _charges():
+    from . import charges  # charges imports this module; imported late to avoid a cycle
+    return charges
 
 
 def apply_role_grants(role, grants):
@@ -469,11 +476,14 @@ def closure_problem(acc):
     return None
 
 
-def post_transaction(account, txn_type, amount, channel, category, description, when=None, contra=None):
+def post_transaction(account, txn_type, amount, channel, category, description, when=None, contra=None,
+                     allow_frozen=False):
     """Credit or debit a customer account and post the matching ledger entry atomically.
 
     contra: the other side of the entry — None (cash / clearing by channel), a GL code, or
     a list of ledger.Leg for split postings (e.g. an EMI split into principal and interest).
+    allow_frozen: bank-side debits (fees, TDS) that a debit freeze does not stop.
+    After a credit, fees recorded as due on the account are collected (charges.collect_due_fees).
     """
     from .money import MAX_AMOUNT
     if txn_type not in ("Credit", "Debit"):
@@ -487,7 +497,7 @@ def post_transaction(account, txn_type, amount, channel, category, description, 
     lock(account)  # serialise concurrent postings on this account
     if account.status in ("Closed", "Pending", "Rejected"):
         raise ValueError("Transactions are not allowed on a closed or pending account.")
-    if txn_type == "Debit" and account.status == "Frozen":
+    if txn_type == "Debit" and account.status == "Frozen" and not allow_frozen:
         raise ValueError("This account is frozen: withdrawals and debits are blocked.")
     if txn_type == "Debit" and amount > q2(account.balance):
         raise ValueError(f"Insufficient balance: available {inr(account.balance, 2)}.")
@@ -517,6 +527,8 @@ def post_transaction(account, txn_type, amount, channel, category, description, 
                            "transaction", txn.txn_ref, _actor_id())
     txn.journal_entry_id = entry.id
     evaluate_transaction(txn, prior_status)
+    if txn_type == "Credit" and _charges().has_due_fees(account.id):
+        _charges().collect_due_fees(account)
     return txn
 
 
@@ -667,7 +679,10 @@ def pay_out_fd(fd, premature=False):
         raise ApprovalBlocked("No open payout account is linked to this FD.")
     post_transaction(payout, "Credit", value, "Transfer", "FD Maturity" if not premature else "FD Premature Closure",
                      f"{'Premature closure' if premature else 'Maturity proceeds'} of {fd.fd_number}",
-                     contra=[L.Leg(L.TERM_DEPOSITS, fd.principal), L.Leg(L.INTEREST_EXPENSE, interest)])
+                     contra=[leg for leg in (L.Leg(L.TERM_DEPOSITS, fd.principal), L.Leg(L.INTEREST_EXPENSE, interest))
+                             if leg.amount > ZERO])
+    if interest > ZERO:
+        _charges().deduct_tds_on_fd_interest(fd, payout, interest)
     fd.status = "Closed" if premature else "Matured"
     fd.premature = premature
     fd.paid_out_on = today
@@ -680,13 +695,11 @@ def pay_out_fd(fd, premature=False):
 # Savings interest (actual/365 on daily closing balances)
 # --------------------------------------------------------------------------
 
-def savings_interest_preview(start, end, branch_ids):
-    """Interest per savings account for local dates start..end, computed in SQL from the
-    transaction history: Σ daily closing balance × rate / 365.
-
-    product = opening × days + Σ net_i × (end − day_i + 1) for each transaction i in the period,
-    where opening = today's balance − net of every transaction on or after `start`.
-    """
+def _balance_products(start, end, statuses, branch_ids=None, min_rate=-1, opened_by=None):
+    """(account id, number, rate, product) for savings accounts in `statuses` (and `branch_ids`, all
+    if None; rate above `min_rate`; opened on or before `opened_by`), where product = Σ daily closing balance over local dates start..end, from the transaction history:
+    opening × days + Σ net_i × (end − day_i + 1) for each transaction i in the period,
+    and opening = today's balance − net of every transaction on or after `start`."""
     from .utils import TZ_OFFSET, day_bounds
     s_utc, _ = day_bounds(start, start)
     days = (end - start).days + 1
@@ -700,13 +713,29 @@ def savings_interest_preview(start, end, branch_ids):
                         (CASE WHEN t.txn_type = 'Credit' THEN t.amount ELSE -t.amount END)
                         * (:e - (t.timestamp + make_interval(mins => :off))::date + 1) END), 0) AS weighted
         FROM account a LEFT JOIN transaction t ON t.account_id = a.id AND t.timestamp >= :s
-        WHERE a.account_type = 'Savings' AND a.status IN ('Active','Inactive','Dormant','Frozen')
-          AND a.interest_rate > 0 AND a.branch_id = ANY(:b)
+        WHERE a.account_type = 'Savings' AND a.status = ANY(:st) AND a.interest_rate > :min_rate
+          AND (:all_branches OR a.branch_id = ANY(:b)) AND (:any_open_date OR a.opened_on <= :opened_by)
         GROUP BY a.id ORDER BY a.id""")
-    rows = db.session.execute(sql, {"s": s_utc, "e": end, "b": list(branch_ids), "off": off}).all()
+    rows = db.session.execute(sql, {"s": s_utc, "e": end, "off": off, "st": list(statuses), "min_rate": min_rate,
+                                    "all_branches": branch_ids is None, "b": list(branch_ids or []),
+                                    "any_open_date": opened_by is None, "opened_by": opened_by or end}).all()
+    return [(acc_id, number, rate, D(opening) * days + D(weighted))
+            for acc_id, number, rate, _balance, opening, weighted in rows]
+
+
+def average_daily_balances(start, end, statuses, opened_by=None):
+    """[(savings account id, average daily closing balance)] for local dates start..end."""
+    days = (end - start).days + 1
+    return [(acc_id, q2(product / days))
+            for acc_id, _n, _r, product in _balance_products(start, end, statuses, opened_by=opened_by)]
+
+
+def savings_interest_preview(start, end, branch_ids):
+    """Interest per savings account for local dates start..end: Σ daily closing balance × rate / 365."""
+    days = (end - start).days + 1
+    rows = _balance_products(start, end, ("Active", "Inactive", "Dormant", "Frozen"), branch_ids=branch_ids, min_rate=0)
     out = []
-    for acc_id, number, rate, _balance, opening, weighted in rows:
-        product = D(opening) * days + D(weighted)
+    for acc_id, number, rate, product in rows:
         interest = q2(product * D(rate) / 100 / 365) if product > 0 else ZERO
         if interest > ZERO:
             out.append({"account_id": acc_id, "account_number": number, "rate": rate,
@@ -885,6 +914,10 @@ def scan_scheduled_alerts(force=False):
         {"status": "Dormant"}, synchronize_session=False)
     Account.query.filter(Account.status == "Active", Account.last_txn_on < today - timedelta(days=180)).update(
         {"status": "Inactive"}, synchronize_session=False)
+    period = f"{today.replace(day=1) - timedelta(days=1):%Y-%m}"
+    if Setting.get("fees_charged_for") != period:  # monthly minimum-balance charges, once per month
+        _charges().charge_monthly_fees(today)
+        Setting.set("fees_charged_for", period)
     Setting.set("last_alert_scan", datetime.utcnow().isoformat())
     db.session.commit()
     from .audit_chain import seal

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, csrf with context %}
+{% block title %}Fee schedule{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', url_for('transactions.index')), ('Fees & charges', url_for('fees.index')), ('Fee schedule', None)]) }}
+<div class="page-head"><div><h1>Fee schedule</h1><p>The starter amounts are placeholders. Set your bank's approved charges. Each change is recorded in the audit log.</p></div></div>
+<div class="card mb"><div class="card-body flush table-wrap">
+  {% if types %}
+  <table class="table">
+    <thead><tr><th>Code</th><th>Fee</th><th>Applies</th><th class="num">Amount</th><th class="num">GST</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for t in types %}
+      <tr><td class="mono">{{ t.code }}</td><td class="primary-cell">{{ t.name }}</td>
+        <td>{% if t.kind == 'min_balance' %}Monthly, if the average balance is below {{ t.threshold|inr }}{% else %}Charged by staff{% endif %}</td>
+        <td class="num">{% if t.calc == 'flat' %}{{ t.amount|inr(2) }}{% else %}{{ '%g'|format(t.percent) }}%{% if t.min_amount %}<div class="sub-cell">min {{ t.min_amount|inr }}{% if t.max_amount %} · max {{ t.max_amount|inr }}{% endif %}</div>{% endif %}{% endif %}</td>
+        <td class="num">{{ '%g'|format(t.gst_pct) }}%</td><td>{{ badge('Active' if t.active else 'Inactive') }}</td>
+        <td class="right">{% if can_edit %}<a class="btn sm ghost" href="{{ url_for('fees.types', edit=t.id) }}#form">{{ icon('edit', 'sm') }} Edit</a>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty('No fees set up yet.', 'rupee') }}{% endif %}
+</div></div>
+{% if can_edit %}
+{% set e = edit %}
+<div class="card" id="form"><div class="card-head"><h2>{% if e %}Edit {{ e.name }}{% else %}Add a fee{% endif %}</h2></div><div class="card-body">
+  <form method="post" class="form-grid" data-confirm="Save this fee? New charges use it straight away." data-confirm-ok="Save fee">
+    {{ csrf() }}{% if e %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+    <div class="field"><label for="code">Code</label><input id="code" name="code" maxlength="20" value="{{ e.code if e else '' }}" {{ 'disabled' if e else 'required' }}></div>
+    <div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="120" required value="{{ e.name if e else '' }}"></div>
+    <div class="field"><label for="kind">When it applies</label><select id="kind" name="kind">
+      <option value="manual" {{ 'selected' if e and e.kind == 'manual' }}>Charged by staff (service fee)</option>
+      <option value="min_balance" {{ 'selected' if e and e.kind == 'min_balance' }}>Monthly: savings average balance below a minimum</option></select></div>
+    <div class="field"><label for="calc">Worked out as</label><select id="calc" name="calc">
+      <option value="flat" {{ 'selected' if e and e.calc == 'flat' }}>Flat amount</option>
+      <option value="percent" {{ 'selected' if e and e.calc == 'percent' }}>Percentage of an amount</option></select></div>
+    <div class="field"><label for="amount">Flat amount (₹)</label><input id="amount" name="amount" type="number" step="0.01" min="0" value="{{ e.amount if e and e.amount is not none else '' }}"></div>
+    <div class="field"><label for="percent">Percentage (%)</label><input id="percent" name="percent" type="number" step="0.0001" min="0" max="25" value="{{ '%g'|format(e.percent) if e and e.percent is not none else '' }}"></div>
+    <div class="field"><label for="min_amount">Minimum fee (₹, percentage fees)</label><input id="min_amount" name="min_amount" type="number" step="0.01" min="0" value="{{ e.min_amount if e and e.min_amount is not none else '' }}"></div>
+    <div class="field"><label for="max_amount">Maximum fee (₹, percentage fees)</label><input id="max_amount" name="max_amount" type="number" step="0.01" min="0" value="{{ e.max_amount if e and e.max_amount is not none else '' }}"></div>
+    <div class="field"><label for="gst_pct">GST (%)</label><input id="gst_pct" name="gst_pct" type="number" step="0.01" min="0" max="28" value="{{ '%g'|format(e.gst_pct) if e else '18' }}"></div>
+    <div class="field"><label for="threshold">Minimum balance to keep (₹, monthly charge)</label><input id="threshold" name="threshold" type="number" step="0.01" min="0" value="{{ e.threshold if e and e.threshold is not none else '' }}"></div>
+    <label class="check full"><input type="checkbox" name="active" value="1" {{ 'checked' if not e or e.active }}> Active</label>
+    <div class="full actions"><button class="btn primary">{{ icon('check', 'sm') }} Save fee</button>{% if e %}<a class="btn ghost" href="{{ url_for('fees.types') }}">Cancel</a>{% endif %}</div>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, crumbs, csrf, receipt_notice with context %}
+{% block title %}Charge a fee{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', url_for('transactions.index')), ('Fees & charges', url_for('fees.index')), ('Charge a fee', None)]) }}
+<div class="page-head"><div><h1>Charge a fee</h1><p>Debits the account with the fee plus GST. If the balance is too low the fee is recorded as due and collected from the next credit.</p></div></div>
+{{ receipt_notice(receipts) }}
+<div class="card mb"><div class="card-body">
+  <form method="get" class="filters">
+    <input type="search" name="account" value="{{ acc_no }}" placeholder="Enter account number" required autofocus inputmode="numeric" maxlength="20" aria-label="Account number">
+    <button class="btn primary">{{ icon('search', 'sm') }} Load account</button>
+  </form>
+</div></div>
+{% if account %}
+<div class="card"><div class="card-head"><h2>{{ account.customer.name }} · <span class="mono">{{ account.account_number }}</span></h2>{{ badge(account.status) }}</div>
+  <div class="card-body">
+    <div class="stat-row mb"><div class="stat"><div class="label">Available balance</div><div class="value">{{ account.balance|inr(2) }}</div></div>
+      <div class="stat"><div class="label">Type</div><div class="value">{{ account.account_type }}</div></div></div>
+    {% if not types %}<div class="notice warning">{{ icon('alert', 'sm') }}<span>No service fees are set up. Add them in the fee schedule.</span></div>
+    {% elif account.status in ('Closed', 'Pending', 'Rejected') %}<div class="notice warning">{{ icon('lock', 'sm') }}<span>Fees cannot be charged to a {{ account.status|lower }} account.</span></div>
+    {% else %}
+    <form method="post" class="form-grid" data-confirm="Charge the selected fee to account {{ account.account_number }} ({{ account.customer.name }})?" data-confirm-title="Confirm fee" data-confirm-ok="Charge">
+      {{ csrf() }}<input type="hidden" name="account" value="{{ account.account_number }}">
+      <div class="field"><label for="fee_type">Fee</label><select id="fee_type" name="fee_type" required>
+        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if f.get('fee_type')|string == t.id|string }}>{{ t.name }} — {% if t.calc == 'flat' %}{{ quotes[t.id][2]|inr(2) }} incl. GST{% else %}{{ '%g'|format(t.percent) }}%{% if t.min_amount %} (min {{ t.min_amount|inr }}{% if t.max_amount %}, max {{ t.max_amount|inr }}{% endif %}){% endif %} + GST{% endif %}</option>{% endfor %}
+      </select></div>
+      <div class="field"><label for="base">Amount the fee applies to (₹)</label><input id="base" name="base" type="number" step="0.01" min="0.01" inputmode="decimal" value="{{ f.get('base', '') }}">
+        <div class="hint">Only for percentage fees, e.g. the demand-draft amount.</div></div>
+      <div class="field full"><label for="note">Note</label><input id="note" name="note" maxlength="200" value="{{ f.get('note', '') }}" placeholder="Optional, e.g. cheque book serial"></div>
+      <div class="full actions"><button class="btn primary" data-busy="Charging…">{{ icon('rupee', 'sm') }} Charge fee</button>
+        <a class="btn ghost" href="{{ url_for('fees.index') }}">Cancel</a></div>
+    </form>
+    {% endif %}
+  </div></div>
+{% endif %}
+{% endblock %}

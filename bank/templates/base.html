@@ -49,7 +49,8 @@
         </div>
       </details>
       {% endif %}
-      {% if current_user.can('transactions') %}{{ nav_link('transactions.index', 'Transactions', 'swap', ep.startswith('transactions.')) }}{% endif %}
+      {% if current_user.can('transactions') %}{{ nav_link('transactions.index', 'Transactions', 'swap', ep.startswith('transactions.')) }}
+      {{ nav_link('fees.index', 'Fees & Charges', 'rupee', ep.startswith('fees.')) }}{% endif %}
       {% if current_user.can('kyc') %}{{ nav_link('kyc.index', 'KYC & Documents', 'file', ep.startswith('kyc.'), work.kyc if work) }}{% endif %}
       {% if current_user.can('loan_approval') or current_user.can('customer_accounts', 'approve') or current_user.can('deposits', 'approve') %}
         {{ nav_link('approvals.index', 'Approvals', 'approval', ep.startswith('approvals.'), work.approvals if work) }}

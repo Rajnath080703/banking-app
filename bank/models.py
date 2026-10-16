@@ -212,6 +212,7 @@ class Customer(db.Model, TimestampMixin):
     pan_hash = db.Column(db.String(64), index=True)
     _mobile = db.Column("mobile_enc", db.String(255))
     mobile_hash = db.Column(db.String(64), index=True)
+    tds_exempt_fy = db.Column(db.String(7))  # financial year ("2026-27") with a Form 15G/15H on file
 
     branch = db.relationship("Branch")
     accounts = db.relationship("Account", backref="customer", lazy="dynamic")
@@ -323,6 +324,86 @@ class Transaction(db.Model):
         db.CheckConstraint(_in("txn_type", ("Credit", "Debit")), name="ck_txn_type"),
         db.Index("ix_txn_branch_time", "branch_id", "timestamp"),
         db.Index("ix_txn_account_time", "account_id", "timestamp"),
+    )
+
+
+FEE_STATUSES = ("Charged", "Due", "Waived", "Skipped")
+
+
+class FeeType(db.Model, TimestampMixin):
+    """One line of the fee schedule. kind: manual (staff charge it) or min_balance (monthly job)."""
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), unique=True, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    calc = db.Column(db.String(10), nullable=False, default="flat")  # flat / percent
+    amount = db.Column(Money)            # flat fee
+    percent = db.Column(Rate)            # percentage fee …
+    min_amount = db.Column(Money)        # … with optional floor
+    max_amount = db.Column(Money)        # … and ceiling
+    gst_pct = db.Column(Rate, nullable=False, default=18)
+    kind = db.Column(db.String(20), nullable=False, default="manual")
+    threshold = db.Column(Money)         # min_balance: the average balance to keep
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    __table_args__ = (
+        db.CheckConstraint(_in("calc", ("flat", "percent")), name="ck_fee_type_calc"),
+        db.CheckConstraint(_in("kind", ("manual", "min_balance")), name="ck_fee_type_kind"),
+        db.CheckConstraint("(calc = 'flat' AND amount > 0) OR (calc = 'percent' AND percent > 0)",
+                           name="ck_fee_type_amount"),
+        db.CheckConstraint("gst_pct >= 0 AND gst_pct <= 28", name="ck_fee_type_gst"),
+    )
+
+
+class FeeCharge(db.Model):
+    """A fee raised on an account. Due = not yet collected (no ledger entry until it is)."""
+    id = db.Column(db.Integer, primary_key=True)
+    charge_ref = db.Column(db.String(20), unique=True, nullable=False)
+    fee_type_id = db.Column(db.Integer, db.ForeignKey("fee_type.id"), nullable=False, index=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("account.id"), nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    branch_id = db.Column(db.Integer, db.ForeignKey("branch.id"), nullable=False, index=True)
+    base_amount = db.Column(Money, nullable=False)
+    gst_amount = db.Column(Money, nullable=False, default=0)
+    total = db.Column(Money, nullable=False)
+    period = db.Column(db.String(7))     # "2026-10" for monthly charges
+    status = db.Column(db.String(10), nullable=False, default="Due")
+    note = db.Column(db.String(200))
+    txn_id = db.Column(db.Integer, db.ForeignKey("transaction.id"))
+    refund_txn_id = db.Column(db.Integer, db.ForeignKey("transaction.id"))
+    created_by = db.Column(db.Integer, db.ForeignKey("employee.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    settled_at = db.Column(db.DateTime)
+    fee_type = db.relationship("FeeType")
+    account = db.relationship("Account")
+    customer = db.relationship("Customer")
+    __table_args__ = (
+        db.CheckConstraint(_in("status", FEE_STATUSES), name="ck_fee_charge_status"),
+        db.CheckConstraint("base_amount > 0 AND gst_amount >= 0 AND total = base_amount + gst_amount",
+                           name="ck_fee_charge_amounts"),
+        db.UniqueConstraint("account_id", "fee_type_id", "period", name="uq_fee_charge_period"),
+        db.Index("ix_fee_charge_due", "account_id", postgresql_where=db.text("status = 'Due'")),
+    )
+
+
+class InterestTds(db.Model):
+    """Every FD interest payout with the tax deducted from it (0 when below the threshold or
+    exempt). Append-only: the yearly totals per customer drive the next deduction."""
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    branch_id = db.Column(db.Integer, db.ForeignKey("branch.id"), nullable=False, index=True)
+    fd_id = db.Column(db.Integer, db.ForeignKey("fixed_deposit.id"), index=True)
+    fin_year = db.Column(db.String(7), nullable=False)
+    interest = db.Column(Money, nullable=False)
+    tds = db.Column(Money, nullable=False, default=0)
+    rate = db.Column(Rate, nullable=False, default=0)
+    pan_available = db.Column(db.Boolean, nullable=False)
+    note = db.Column(db.String(200))
+    txn_id = db.Column(db.Integer, db.ForeignKey("transaction.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    customer = db.relationship("Customer")
+    fd = db.relationship("FixedDeposit")
+    __table_args__ = (
+        db.CheckConstraint("interest >= 0 AND tds >= 0 AND tds <= interest", name="ck_interest_tds_amounts"),
+        db.Index("ix_interest_tds_customer_fy", "customer_id", "fin_year"),
     )
 
 
@@ -652,6 +733,9 @@ GL_ACCOUNTS = [
     ("2100", "Term deposits (FD)", "Liability"),
     ("4000", "Interest income on loans", "Income"),
     ("4100", "Penal charges income", "Income"),
+    ("4200", "Fee and service charges income", "Income"),
+    ("2300", "GST payable on charges", "Liability"),
+    ("2400", "TDS payable (tax deducted on interest)", "Liability"),
     ("5000", "Interest expense on deposits", "Expense"),
 ]
 
@@ -750,6 +834,10 @@ class Setting(db.Model):
         "fd_premature_penalty_pct": "1",  # rate reduction on premature FD closure
         "max_export_rows": "50000",
         "absolute_session_hours": "12",
+        "tds_rate_pct": "10",               # TDS on FD interest with a PAN on file
+        "tds_rate_no_pan_pct": "20",        # without a valid PAN
+        "tds_threshold": "50000",           # yearly FD interest per customer before TDS applies
+        "tds_threshold_senior": "100000",   # same, for senior citizens (60+)
     }
 
     @classmethod

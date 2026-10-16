@@ -115,6 +115,8 @@ def ensure_core():
                       description="An employee signs in from an IP address not used in the last 30 days."),
         ])
     ensure_chart()
+    from .charges import ensure_fee_types
+    ensure_fee_types()
     db.session.flush()
 
     admin = Employee.query.filter_by(email=SUPER_ADMIN_EMAIL).first()

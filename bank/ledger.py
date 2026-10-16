@@ -7,7 +7,8 @@ trigger, so even code that bypasses this module cannot commit an unbalanced entr
 Chart of accounts (see models.GL_ACCOUNTS):
     1000 Cash · 1100 Clearing · 1200 Loans            (assets)
     2000 Customer deposits · 2100 Term deposits       (liabilities)
-    4000 Interest income · 4100 Penal income          (income)
+    2300 GST payable · 2400 TDS payable               (liabilities)
+    4000 Interest income · 4100 Penal income · 4200 Fee income (income)
     5000 Interest expense                             (expense)
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ from .utils import local_today, unique_number
 CASH, CLEARING, LOANS = "1000", "1100", "1200"
 DEPOSITS, TERM_DEPOSITS = "2000", "2100"
 INTEREST_INCOME, PENAL_INCOME, INTEREST_EXPENSE = "4000", "4100", "5000"
+FEE_INCOME, GST_PAYABLE, TDS_PAYABLE = "4200", "2300", "2400"
 
 
 class LedgerError(Exception):

@@ -9,8 +9,8 @@ from sqlalchemy.orm import joinedload
 
 from ..extensions import db, limiter
 from ..money import q2
-from ..models import (Account, ApprovalRequest, AuditLog, Branch, Customer, Document, Employee,
-                      FixedDeposit, Loan, LoanRepayment, Ticket, Transaction)
+from ..models import (Account, ApprovalRequest, AuditLog, Branch, Customer, Document, Employee, FeeCharge,
+                      FixedDeposit, InterestTds, Loan, LoanRepayment, Ticket, Transaction)
 from ..security import audit, require_perm
 from ..utils import date_range_from_request, day_bounds, sql_day, sql_month, to_local
 
@@ -115,6 +115,26 @@ def r_overdue(start, end, br):
              for l in rows])
 
 
+def r_fees(start, end, br):
+    s, e = day_bounds(start, end)
+    rows = (FeeCharge.query.options(joinedload(FeeCharge.customer), joinedload(FeeCharge.fee_type), joinedload(FeeCharge.account))
+            .filter(FeeCharge.branch_id.in_(br), FeeCharge.created_at.between(s, e)).order_by(FeeCharge.id.desc()).all())
+    return (["Date", "Charge", "Customer", "Account", "Fee", "Period", "Fee (₹)", "GST (₹)", "Total (₹)", "Status"],
+            [[to_local(c.created_at).date().isoformat(), c.charge_ref, c.customer.name, c.account.account_number,
+              c.fee_type.name, c.period or "", _money(c.base_amount), _money(c.gst_amount), _money(c.total), c.status]
+             for c in rows])
+
+
+def r_tds(start, end, br):
+    s, e = day_bounds(start, end)
+    rows = (InterestTds.query.options(joinedload(InterestTds.customer), joinedload(InterestTds.fd))
+            .filter(InterestTds.branch_id.in_(br), InterestTds.created_at.between(s, e)).order_by(InterestTds.id.desc()).all())
+    return (["Date", "FY", "Customer", "Customer ID", "PAN", "FD No", "Interest paid (₹)", "TDS rate (%)", "TDS (₹)", "Note"],
+            [[to_local(r.created_at).date().isoformat(), r.fin_year, r.customer.name, r.customer.customer_code,
+              r.customer.pan_masked if r.pan_available else "Not provided", r.fd.fd_number if r.fd else "",
+              _money(r.interest), r.rate, _money(r.tds), r.note or ""] for r in rows])
+
+
 def r_new_accounts(start, end, br):
     rows = Account.query.options(joinedload(Account.customer)).filter(Account.branch_id.in_(br), Account.opened_on.between(start, end)).order_by(Account.opened_on.desc()).all()
     return (["Opened", "Account No", "Customer", "Type", "Status", "Balance (₹)"],
@@ -190,6 +210,8 @@ REPORTS = {
     "daily-transactions": ("Daily Transactions", "Credits, debits and counts per day", "transactions", r_daily_txn),
     "monthly-transactions": ("Monthly Transactions", "Month-wise transaction summary", "transactions", r_monthly_txn),
     "deposits": ("Deposits", "Credits and new fixed deposits", "deposits", r_deposits),
+    "fees": ("Fees & Charges", "Fees charged, due, waived and skipped, with GST", "transactions", r_fees),
+    "tds": ("TDS on FD Interest", "Interest paid and tax deducted, per customer and financial year", "deposits", r_tds),
     "withdrawals": ("Withdrawals", "All debit transactions", "transactions", r_withdrawals),
     "loans": ("Loans", "Loan book with outstanding balances", "loans", r_loans),
     "loan-collections": ("Loan Collections", "EMI and repayment receipts", "loans", r_collections),

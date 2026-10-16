@@ -30,6 +30,10 @@ EDITABLE = [
     ("penal_rate_pa", "Penal charge on overdue EMI (% a year)", "number", (0, 36)),
     ("fd_premature_penalty_pct", "FD premature-closure penalty (% off the rate)", "number", (0, 3)),
     ("max_export_rows", "Largest report export (rows)", "number", (100, 500000)),
+    ("tds_rate_pct", "TDS on FD interest, with PAN (%)", "number", (0, 30)),
+    ("tds_rate_no_pan_pct", "TDS on FD interest, without PAN (%)", "number", (0, 40)),
+    ("tds_threshold", "Yearly FD interest before TDS (₹)", "number", (0, 10000000)),
+    ("tds_threshold_senior", "Yearly FD interest before TDS, senior citizens (₹)", "number", (0, 10000000)),
 ]
 
 

@@ -87,6 +87,7 @@
       <dt>Occupation</dt><dd>{{ c.occupation or '—' }}</dd>
       <dt>Customer since</dt><dd>{{ c.created_at|d }}</dd>
       <dt>KYC Status</dt><dd>{{ badge(c.kyc_status) }}</dd>
+      {% if c.tds_exempt_fy %}<dt>Form 15G/15H</dt><dd>Received for FY {{ c.tds_exempt_fy }}</dd>{% endif %}
     </dl>
   </div></div>
 

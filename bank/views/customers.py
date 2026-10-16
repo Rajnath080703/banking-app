@@ -7,6 +7,7 @@ from flask import (Blueprint, abort, flash, redirect, render_template, request, 
                    url_for)
 from flask_login import current_user, login_required
 
+from ..charges import financial_year
 from ..extensions import db
 from ..models import (Account, Activity, ApprovalRequest, Branch, Customer, Document,
                       FixedDeposit, Loan, LoanRepayment, Setting, Ticket, Transaction)
@@ -353,6 +354,9 @@ def edit(cid):
             problems.append("Enter a valid email address or leave it blank.")
         if f.get("risk_category") not in ("Low", "Medium", "High"):
             problems.append("Choose a risk category.")
+        fy = financial_year(local_today())
+        if f.get("tds_exempt_fy", "") not in ("", fy, c.tds_exempt_fy or ""):
+            problems.append(f"Form 15G/15H can only be recorded for the current financial year ({fy}).")
         if problems:
             for p in problems:
                 flash(p, "danger")
@@ -360,7 +364,8 @@ def edit(cid):
         changes = {}
         for field_name in CUSTOMER_EDITABLE:
             new_val = f.get(field_name, "").strip()
-            limit = {"mobile": 10, "email": 160, "address": 255, "city": 80, "occupation": 80, "risk_category": 10}[field_name]
+            limit = {"mobile": 10, "email": 160, "address": 255, "city": 80, "occupation": 80, "risk_category": 10,
+                     "tds_exempt_fy": 7}[field_name]
             new_val = new_val[:limit]
             if field_name == "mobile" and not new_val:
                 continue
@@ -378,7 +383,7 @@ def edit(cid):
         return redirect(url_for("customers.profile", cid=c.id, tab="approvals"))
     audit("Sensitive data revealed", "customer_profile", c.customer_code, "edit form")
     db.session.commit()
-    return render_template("customers/edit.html", c=c, pending=pending)
+    return render_template("customers/edit.html", c=c, pending=pending, fy=financial_year(local_today()))
 
 
 @bp.route("/search")

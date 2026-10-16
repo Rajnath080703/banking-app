@@ -17,6 +17,11 @@
     <div class="field"><label for="occupation">Occupation</label><input id="occupation" name="occupation" value="{{ c.occupation or '' }}"></div>
     <div class="field"><label for="risk_category">Risk category</label><select id="risk_category" name="risk_category">
       {% for r in ['Low', 'Medium', 'High'] %}<option {{ 'selected' if c.risk_category == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="tds_exempt_fy">Form 15G / 15H (no TDS on FD interest)</label><select id="tds_exempt_fy" name="tds_exempt_fy">
+      <option value="">Not received</option>
+      <option value="{{ fy }}" {{ 'selected' if c.tds_exempt_fy == fy }}>Received for FY {{ fy }}</option>
+      {% if c.tds_exempt_fy and c.tds_exempt_fy != fy %}<option value="{{ c.tds_exempt_fy }}" selected>Received for FY {{ c.tds_exempt_fy }} (past year)</option>{% endif %}</select>
+      <div class="hint">Keep the signed form on file. It is valid for one financial year only.</div></div>
     <div class="full actions"><button class="btn primary" type="submit" {{ 'disabled' if pending }} data-busy="Sending…">Send for approval</button>
       <a class="btn ghost" href="{{ url_for('customers.profile', cid=c.id) }}">Cancel</a></div>
   </form>

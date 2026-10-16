@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, badge, empty, crumbs, pager, csrf with context %}
+{% block title %}Fees & charges{% endblock %}
+{% block content %}
+{{ crumbs([('Transactions', url_for('transactions.index')), ('Fees & charges', None)]) }}
+<div class="page-head"><div><h1>Fees & charges</h1><p>Service fees, minimum-balance charges and waivers. GST is shown separately on each charge.</p></div>
+  <div class="actions">{% if current_user.can('transactions', 'create') %}<a class="btn primary" href="{{ url_for('fees.charge') }}">{{ icon('plus', 'sm') }} Charge a fee</a>{% endif %}
+    {% if current_user.can('settings') %}<a class="btn" href="{{ url_for('fees.types') }}">{{ icon('settings', 'sm') }} Fee schedule</a>{% endif %}</div></div>
+<div class="kpis mb">
+  <div class="kpi"><span class="kpi-label">Charged</span><span class="kpi-value">{{ counts.get('Charged', 0) }}</span></div>
+  <div class="kpi"><span class="kpi-label">Due (waiting for a credit)</span><span class="kpi-value">{{ counts.get('Due', 0) }}</span><span class="kpi-foot">{{ due_total|inr(2) }}</span></div>
+  <div class="kpi"><span class="kpi-label">Waived</span><span class="kpi-value">{{ counts.get('Waived', 0) }}</span></div>
+  <div class="kpi"><span class="kpi-label">Skipped (balance too low)</span><span class="kpi-value">{{ counts.get('Skipped', 0) }}</span></div>
+</div>
+<div class="card">
+  <div class="card-head"><div class="seg">{% for s in ['', 'Charged', 'Due', 'Waived', 'Skipped'] %}<a href="{{ url_for('fees.index', status=s) }}" class="{{ 'on' if status == s }}">{{ s or 'All' }}</a>{% endfor %}</div></div>
+  <div class="card-body flush table-wrap">
+    {% if charges.items %}
+    <table class="table">
+      <thead><tr><th>Charge</th><th>Date</th><th>Customer / account</th><th>Fee</th><th class="num">Fee</th><th class="num">GST</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
+      <tbody>{% for c in charges.items %}
+        <tr><td class="mono primary-cell">{{ c.charge_ref }}</td><td class="nowrap small">{{ c.created_at|dt }}</td>
+          <td>{{ c.customer.name }}<div class="sub-cell mono">{{ c.account.account_number }}</div></td>
+          <td>{{ c.fee_type.name }}{% if c.period %} <span class="muted">· {{ c.period }}</span>{% endif %}{% if c.note %}<div class="sub-cell">{{ c.note }}</div>{% endif %}</td>
+          <td class="num">{{ c.base_amount|inr(2) }}</td><td class="num">{{ c.gst_amount|inr(2) }}</td><td class="num"><strong>{{ c.total|inr(2) }}</strong></td>
+          <td>{{ badge(c.status) }}</td>
+          <td class="right nowrap">
+            {% if waiting.get(c.id) %}<span class="small muted">Waiver {{ waiting[c.id].request_number }} pending</span>
+            {% elif c.status in ('Charged', 'Due') and current_user.can('transactions', 'create') %}
+            <form method="post" action="{{ url_for('fees.waive', fid=c.id) }}" class="reveal-form"
+                  data-confirm="Ask to waive {{ c.fee_type.name }} {{ c.charge_ref }} of {{ c.total|inr(2) }} for {{ c.customer.name }}? {{ 'It is refunded to the account' if c.status == 'Charged' else 'It is cancelled' }} once a checker and a manager approve."
+                  data-confirm-title="Waive fee" data-confirm-ok="Send for approval" data-confirm-reason="Reason for the waiver (required)">
+              {{ csrf() }}<input type="hidden" name="reason" value=""><input type="hidden" name="back" value="{{ request.full_path }}"><button class="btn sm ghost" type="submit">Waive</button></form>
+            {% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}{{ empty('No fees match this filter.', 'rupee') }}{% endif %}
+  </div>
+  {{ pager(charges, 'fees.index') }}
+</div>
+{% endblock %}
